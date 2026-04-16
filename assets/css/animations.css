@@ -1,0 +1,53 @@
+/* ── Eventful — animations.css ──────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes page-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+body { animation: page-in 0.3s ease forwards; }
+
+.result-row { animation: fade-up 0.22s ease both; }
+.result-row:nth-child(1)   { animation-delay: 0ms; }
+.result-row:nth-child(2)   { animation-delay: 30ms; }
+.result-row:nth-child(3)   { animation-delay: 58ms; }
+.result-row:nth-child(4)   { animation-delay: 84ms; }
+.result-row:nth-child(5)   { animation-delay: 106ms; }
+.result-row:nth-child(n+6) { animation-delay: 120ms; }
+
+.result-row .row-arrow { transition: transform 0.2s cubic-bezier(0.4,0,0.2,1), color 0.15s; }
+
+.bundle-card { animation: fade-up 0.28s ease both; }
+.learn-more-body { animation: fade-up 0.18s ease both; }
+
+@keyframes copy-ok {
+  0%, 75% { background: rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.5); color: var(--success); }
+  100%    { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.4); }
+}
+
+.copy-btn.copied { animation: copy-ok 2s ease forwards; }
+
+#sidebar { transition: left 0.28s cubic-bezier(0.4,0,0.2,1), box-shadow 0.28s; }
+
+.event-id { text-shadow: 0 0 20px rgba(245,158,11,0.25); }
+.card-id  { text-shadow: 0 0 32px rgba(245,158,11,0.35); }
+
+.filter-chip       { transition: all 0.12s; }
+.suggestion-chip   { transition: all 0.15s; }
+.result-row        { transition: border-color 0.15s, box-shadow 0.15s; }
+.related-pill      { transition: all 0.15s; }
+.bundle-event-pill { transition: all 0.15s; }
+.bundle-nav-btn    { transition: all 0.12s; }
+#search-input      { transition: all 0.15s; }
+.share-btn         { transition: all 0.15s; }
+.copy-btn          { transition: all 0.15s; }
