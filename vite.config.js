@@ -6,8 +6,9 @@ export default defineConfig({
     outDir: 'docs',
     rollupOptions: {
       input: {
-        home:    'index.html',
-        results: 'results.html',
+        home:     'index.html',
+        results:  'results.html',
+        analyzer: 'analyzer.html',
       }
     }
   }

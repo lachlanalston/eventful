@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Analyzer — Eventful</title>
+  <meta name="description" content="Upload Windows Event Viewer XML logs for instant root cause analysis. Identifies crash patterns, correlates events, and suggests next steps." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="./assets/analyzer-COZzLR8L.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/theme-CCBoUXgy.js">
+  <link rel="stylesheet" crossorigin href="./assets/analyzer-DOjW4gPZ.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <a href="index.html" class="app-logo">Eventful</a>
+    <div class="header-divider"></div>
+    <nav class="app-nav">
+      <a href="results.html" class="nav-link">Event Lookup</a>
+      <a href="analyzer.html" class="nav-link active">Incident Analyzer</a>
+    </nav>
+    <div class="header-right">
+      <button class="theme-btn" title="Toggle theme">☀</button>
+    </div>
+  </header>
+
+  <!-- ── Upload state ─────────────────────────────────────────────────────── -->
+  <div id="upload-section" class="upload-section">
+    <div class="upload-hero">
+      <span class="upload-hero-icon">🔬</span>
+      <h1>Incident Analyzer</h1>
+      <p class="upload-hero-sub">
+        Upload a Windows Event Viewer XML export for instant root cause analysis.<br>
+        Identifies crash patterns, correlates events, and suggests next steps.
+      </p>
+
+      <div class="drop-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".xml,text/xml,application/xml" hidden />
+        <span class="drop-icon">📁</span>
+        <p class="drop-title">Drop your Event Log XML here</p>
+        <p class="drop-sub">
+          or <button class="drop-browse" onclick="document.getElementById('file-input').click()">browse files</button>
+        </p>
+        <span class="drop-hint">Windows Event Viewer → Action → Save All Events As… → XML</span>
+      </div>
+
+      <details class="how-to">
+        <summary>How to export from Windows Event Viewer</summary>
+        <ol>
+          <li>Open Event Viewer — press <code>Win + R</code>, type <code>eventvwr.msc</code>, press Enter</li>
+          <li>In the left panel, navigate to the log you want (e.g. <strong>Windows Logs → System</strong>)</li>
+          <li>Click <strong>Action</strong> in the menu bar, then <strong>Save All Events As…</strong></li>
+          <li>In the "Save as type" dropdown, select <strong>XML (*.xml)</strong></li>
+          <li>Choose a filename and save — then upload that file here</li>
+        </ol>
+      </details>
+    </div>
+  </div>
+
+  <!-- ── Processing state ─────────────────────────────────────────────────── -->
+  <div id="processing-section" class="processing-section" hidden>
+    <div class="processing-spinner"></div>
+    <p id="processing-text" class="processing-text">Parsing events…</p>
+  </div>
+
+  <!-- ── Results state ────────────────────────────────────────────────────── -->
+  <div id="results-section" class="results-section" hidden>
+
+    <div class="results-header">
+      <div class="results-header-left">
+        <h2 class="results-title">Analysis Complete</h2>
+        <p id="results-sub" class="results-sub-text"></p>
+      </div>
+      <div class="results-header-right">
+        <button id="new-analysis-btn" class="btn-secondary">← New Analysis</button>
+      </div>
+    </div>
+
+    <!-- Health score + stats -->
+    <div id="overview-grid"></div>
+
+    <!-- Incidents -->
+    <div id="incidents-section"></div>
+
+    <!-- All events table -->
+    <div class="event-log-section">
+      <div class="section-header">
+        <h3>All Events</h3>
+        <div class="event-log-controls">
+          <input
+            type="search"
+            id="event-filter"
+            class="event-filter-input"
+            placeholder="Filter by ID, provider, message…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+          <select id="severity-filter" class="event-filter-select">
+            <option value="">All severities</option>
+            <option value="Critical">Critical</option>
+            <option value="Error">Error</option>
+            <option value="Warning">Warning</option>
+            <option value="Info">Info</option>
+            <option value="Verbose">Verbose</option>
+          </select>
+        </div>
+      </div>
+      <div id="event-table-wrap"></div>
+    </div>
+
+  </div>
+
+</body>
+</html>

@@ -38,13 +38,32 @@ body {
 
 /* ── Header ── */
 .site-header {
-  padding: 20px 28px;
+  padding: 14px 28px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
 }
 
 .logo { display: none; }
+
+.home-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.home-nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  padding: 5px 12px;
+  border-radius: 7px;
+  text-decoration: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.home-nav-link:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+[data-theme="light"] .home-nav-link:hover { background: rgba(0,0,0,0.05); }
 
 .theme-btn {
   background: none;
