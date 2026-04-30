@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Results — Eventful</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script type="module" crossorigin src="./assets/results-BCXsSEeF.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/theme-CCBoUXgy.js">
+  <link rel="stylesheet" crossorigin href="./assets/results-B_vBaIKD.css">
+</head>
+<body>
+
+  <!-- One unified header across the full page -->
+  <header class="app-header">
+    <a href="index.html" class="app-logo">Eventful</a>
+    <div class="app-search-wrap">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <input id="search" type="search" class="app-search-input" autocomplete="off" spellcheck="false" />
+    </div>
+    <button class="theme-btn" title="Toggle theme">☀</button>
+  </header>
+
+  <!-- Two-panel layout below the header -->
+  <div class="layout">
+
+    <aside class="sidebar">
+      <!-- Severity filter tab bar -->
+      <div class="filter-bar">
+        <button class="filter-tab active" data-severity="">All</button>
+        <button class="filter-tab" data-severity="Critical">Critical</button>
+        <button class="filter-tab" data-severity="Error">Error</button>
+        <button class="filter-tab" data-severity="Warning">Warning</button>
+        <button class="filter-tab" data-severity="Info">Info</button>
+        <button class="filter-tab" data-severity="Verbose">Verbose</button>
+      </div>
+      <div id="count" class="result-count"></div>
+      <div id="list" class="result-list"></div>
+    </aside>
+
+    <main id="detail" class="detail-panel">
+      <div class="detail-empty">
+        <p>Select an event to view details</p>
+      </div>
+    </main>
+
+  </div>
+
+</body>
+</html>
