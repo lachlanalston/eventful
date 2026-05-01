@@ -126,15 +126,6 @@ body {
   text-align: center;
 }
 
-.wordmark {
-  font-size: 42px;
-  font-weight: 800;
-  color: var(--amber);
-  letter-spacing: -2px;
-  line-height: 1;
-  margin-bottom: 16px;
-}
-
 h1 {
   font-size: 36px;
   font-weight: 700;
@@ -290,8 +281,6 @@ h1 {
   flex-wrap: wrap;
   justify-content: center;
 }
-
-.cta-icon { font-size: 22px; flex-shrink: 0; }
 
 .cta-body {
   flex: 1;

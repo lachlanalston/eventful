@@ -19,24 +19,23 @@
       <a href="analyzer.html" class="nav-link active">Incident Analyzer</a>
     </nav>
     <div class="header-right">
-      <button class="theme-btn" title="Toggle theme">☀</button>
+      <button class="theme-btn" title="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
     </div>
   </header>
 
   <!-- ── Upload state ─────────────────────────────────────────────────────── -->
   <div id="upload-section" class="upload-section">
     <div class="upload-hero">
-      <span class="upload-hero-icon">🔬</span>
+      <span class="upload-hero-icon"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
       <h1>Incident Analyzer</h1>
       <p class="upload-hero-sub">
-        Upload a Windows Event Viewer XML export for instant root cause analysis.<br>
-        Identifies crash patterns, correlates events, and suggests next steps.
+        Correlates Windows event logs to surface root causes and remediation steps.
       </p>
 
       <div class="drop-zone" id="drop-zone">
         <input type="file" id="file-input" accept=".xml,text/xml,application/xml" hidden />
-        <span class="drop-icon">📁</span>
-        <p class="drop-title">Drop your Event Log XML here</p>
+        <span class="drop-icon"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+        <p class="drop-title">Drop XML export here</p>
         <p class="drop-sub">
           or <button class="drop-browse" onclick="document.getElementById('file-input').click()">browse files</button>
         </p>
@@ -67,11 +66,11 @@
 
     <div class="results-header">
       <div class="results-header-left">
-        <h2 class="results-title">Analysis Complete</h2>
+        <h2 class="results-title">Log Analysis</h2>
         <p id="results-sub" class="results-sub-text"></p>
       </div>
       <div class="results-header-right">
-        <button id="new-analysis-btn" class="btn-secondary">← New Analysis</button>
+        <button id="new-analysis-btn" class="btn-secondary">← New file</button>
       </div>
     </div>
 

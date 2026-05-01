@@ -257,8 +257,6 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 .sidebar-analyzer-cta:hover { background: var(--surface2); }
 
-.sac-icon { font-size: 18px; flex-shrink: 0; }
-
 .sac-text {
   display: flex;
   flex-direction: column;

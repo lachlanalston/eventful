@@ -165,9 +165,10 @@ ul, ol { list-style: none; }
 }
 
 .upload-hero-icon {
-  font-size: 48px;
   margin-bottom: 20px;
   display: block;
+  line-height: 0;
+  color: var(--text3);
 }
 
 .upload-hero h1 {
@@ -205,7 +206,7 @@ ul, ol { list-style: none; }
 
 .drop-zone.drag-over { border-style: solid; }
 
-.drop-icon { font-size: 36px; margin-bottom: 12px; display: block; }
+.drop-icon { margin-bottom: 12px; display: block; line-height: 0; color: var(--text3); }
 
 .drop-title {
   font-size: 17px;
@@ -555,7 +556,7 @@ ul, ol { list-style: none; }
 }
 
 .no-incidents-icon {
-  font-size: 36px;
+  line-height: 0;
   color: var(--success);
   margin-bottom: 4px;
 }
@@ -605,8 +606,9 @@ ul, ol { list-style: none; }
 }
 
 .incident-icon {
-  font-size: 22px;
   flex-shrink: 0;
+  line-height: 0;
+  opacity: 0.8;
 }
 
 .incident-title {

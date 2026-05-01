@@ -113,6 +113,9 @@ function resetToUpload() {
 function renderResults(analysis, fileName) {
   const { incidents, healthScore, computerName, stats } = analysis;
 
+  const titleEl = document.querySelector('.results-title');
+  if (titleEl) titleEl.textContent = fileName.replace(/\.xml$/i, '');
+
   if ($resultsSub) {
     const parts = [];
     if (computerName) parts.push(computerName);
@@ -179,7 +182,7 @@ function renderIncidents(incidents) {
   if (!incidents.length) {
     $incidentsSection.innerHTML = `
       <div class="no-incidents">
-        <div class="no-incidents-icon">✓</div>
+        <div class="no-incidents-icon"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
         <div class="no-incidents-title">No incidents detected</div>
         <div class="no-incidents-sub">No known crash or failure anchor events were found in this log.</div>
       </div>
@@ -235,7 +238,7 @@ function renderIncidentCard(inc, index) {
     <div class="incident-card">
       <div class="incident-header ${severityClass} incident-toggle">
         <div class="incident-header-left">
-          <span class="incident-icon">${sig?.icon ?? '⚠'}</span>
+          <span class="incident-icon">${sig?.icon ?? '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'}</span>
           <div>
             <div class="incident-title">${sig?.name ?? anchorTitle(anchor)}</div>
             <div class="incident-meta">
