@@ -600,6 +600,22 @@ ul, ol { list-style: none; }
 .conf-medium { background: rgba(245,158,11,0.12); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }
 .conf-low    { background: rgba(100,116,139,0.12); color: #94a3b8; border: 1px solid rgba(100,116,139,0.2); }
 
+.conf-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.conf-reason {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text3);
+  text-align: right;
+  max-width: 240px;
+  line-height: 1.4;
+}
+
 /* Event ID pill (clickable) */
 .event-id-pill {
   font-family: var(--mono);

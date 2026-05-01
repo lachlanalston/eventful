@@ -54,11 +54,9 @@ const SIGNATURES = [
     test(events) {
       const GPU_PROVIDERS = ['nvlddmkm', 'amdkmdag', 'amd', 'igdkmd', 'dxgkrnl', 'atikmdag'];
       const has4101 = events.some(e => e.id === 4101);
-      const hasGpuProvider = events.some(e =>
-        GPU_PROVIDERS.some(p => e.provider?.toLowerCase().includes(p))
-      );
-      if (has4101) return { match: true, confidence: 'high' };
-      if (hasGpuProvider) return { match: true, confidence: 'medium' };
+      const gpuEv = events.find(e => GPU_PROVIDERS.some(p => e.provider?.toLowerCase().includes(p)));
+      if (has4101) return { match: true, confidence: 'high', reason: 'Event 4101 (display driver TDR timeout) found in window' };
+      if (gpuEv)   return { match: true, confidence: 'medium', reason: `GPU provider "${gpuEv.provider}" found in window — no Event 4101` };
       return { match: false };
     },
     what: 'The graphics card driver stopped responding and Windows could not recover it.',
@@ -84,8 +82,9 @@ const SIGNATURES = [
         DISK_IDS.includes(e.id) ||
         DISK_PROVIDERS.some(p => e.provider?.toLowerCase().includes(p))
       );
-      if (matching.length >= 3) return { match: true, confidence: 'high' };
-      if (matching.length >= 1) return { match: true, confidence: 'medium' };
+      const ids = [...new Set(matching.map(e => e.id))].join(', ');
+      if (matching.length >= 3) return { match: true, confidence: 'high',   reason: `${matching.length} disk error events in window (IDs: ${ids})` };
+      if (matching.length >= 1) return { match: true, confidence: 'medium', reason: `${matching.length} disk error event in window (ID: ${ids})` };
       return { match: false };
     },
     what: 'The storage device reported I/O errors before the incident.',
@@ -105,8 +104,8 @@ const SIGNATURES = [
     icon: '🔵',
     category: 'Kernel Crash',
     test(events, anchor) {
-      if (anchor.id === 1001) return { match: true, confidence: 'high' };
-      if (events.some(e => e.id === 1001)) return { match: true, confidence: 'high' };
+      if (anchor.id === 1001) return { match: true, confidence: 'high', reason: 'Event 1001 (BugCheck) is the anchor — BSOD confirmed' };
+      if (events.some(e => e.id === 1001)) return { match: true, confidence: 'high', reason: 'Event 1001 (BugCheck/BSOD) found in window events' };
       return { match: false };
     },
     what: 'Windows detected an unrecoverable kernel error and created a memory dump.',
@@ -128,8 +127,9 @@ const SIGNATURES = [
     test(events) {
       const SERVICE_IDS = [7031, 7034, 7022, 7023, 7024, 7001, 7011];
       const crashes = events.filter(e => SERVICE_IDS.includes(e.id));
-      if (crashes.length >= 5) return { match: true, confidence: 'high' };
-      if (crashes.length >= 2) return { match: true, confidence: 'medium' };
+      const ids = [...new Set(crashes.map(e => e.id))].join(', ');
+      if (crashes.length >= 5) return { match: true, confidence: 'high',   reason: `${crashes.length} service failure events in window (IDs: ${ids})` };
+      if (crashes.length >= 2) return { match: true, confidence: 'medium', reason: `${crashes.length} service failure events in window (IDs: ${ids})` };
       return { match: false };
     },
     what: 'One or more Windows services crashed or failed to start repeatedly.',
@@ -150,8 +150,8 @@ const SIGNATURES = [
     category: 'Application',
     test(events) {
       const crashes = events.filter(e => e.id === 1000);
-      if (crashes.length >= 3) return { match: true, confidence: 'high' };
-      if (crashes.length >= 1) return { match: true, confidence: 'medium' };
+      if (crashes.length >= 3) return { match: true, confidence: 'high',   reason: `${crashes.length} Event 1000 (application crash) in window` };
+      if (crashes.length >= 1) return { match: true, confidence: 'medium', reason: '1 Event 1000 (application crash) in window' };
       return { match: false };
     },
     what: 'An application was crashing repeatedly before the incident.',
@@ -173,7 +173,7 @@ const SIGNATURES = [
     test(events) {
       const MEM_PROVIDERS = ['microsoft-windows-memoryd', 'whea-logger', 'microsoft-windows-whea'];
       const MEM_IDS = [17, 18, 19, 1]; // WHEA + MemoryDiagnostics-Results
-      const hasMemEvent = events.some(e =>
+      const memEv = events.find(e =>
         MEM_IDS.includes(e.id) ||
         MEM_PROVIDERS.some(p => e.provider?.toLowerCase().includes(p))
       );
@@ -184,7 +184,8 @@ const SIGNATURES = [
           e.data?.BugcheckCode === '80'     // 0x50 = PAGE_FAULT
         )
       );
-      if (hasMemEvent || hasBsodWithMemCode) return { match: true, confidence: 'medium' };
+      if (hasBsodWithMemCode) return { match: true, confidence: 'medium', reason: 'BSOD stop code indicates memory fault (0x1A MEMORY_MANAGEMENT or 0x50 PAGE_FAULT)' };
+      if (memEv) return { match: true, confidence: 'medium', reason: `Memory/WHEA event detected (Event ${memEv.id} from ${memEv.provider || 'unknown provider'})` };
       return { match: false };
     },
     what: 'Hardware memory errors or RAM-related faults were detected.',
@@ -207,11 +208,11 @@ const SIGNATURES = [
       // BugcheckCode 0 in Event 41 = power loss (not a software crash)
       if (anchor.id === 41) {
         const bugcheck = anchor.data?.BugcheckCode;
-        if (bugcheck === '0') return { match: true, confidence: 'high' };
+        if (bugcheck === '0') return { match: true, confidence: 'high', reason: 'Event 41 BugcheckCode=0 — hard power loss confirmed (not a software crash)' };
       }
       // Very few events before anchor = sudden power loss (no software lead-up)
       if ((anchor.id === 41 || anchor.id === 6008) && events.length <= 3) {
-        return { match: true, confidence: 'medium' };
+        return { match: true, confidence: 'medium', reason: `Only ${events.length} event(s) before anchor — abrupt stop, no software lead-up` };
       }
       return { match: false };
     },
@@ -238,8 +239,9 @@ const SIGNATURES = [
         NET_IDS.includes(e.id) ||
         NET_PROVIDERS.some(p => e.provider?.toLowerCase().includes(p))
       );
-      if (netEvents.length >= 3) return { match: true, confidence: 'medium' };
-      if (netEvents.length >= 1) return { match: true, confidence: 'low' };
+      const ids = [...new Set(netEvents.map(e => e.id))].join(', ');
+      if (netEvents.length >= 3) return { match: true, confidence: 'medium', reason: `${netEvents.length} network/DNS events in window (IDs: ${ids})` };
+      if (netEvents.length >= 1) return { match: true, confidence: 'low',    reason: `1 network/DNS event in window (ID: ${ids})` };
       return { match: false };
     },
     what: 'Network or DNS errors were recorded in the period leading up to the incident.',
@@ -365,7 +367,7 @@ function matchSignatures(events, anchor) {
     try {
       const result = sig.test(events, anchor);
       if (result.match) {
-        matches.push({ signature: sig, confidence: result.confidence });
+        matches.push({ signature: sig, confidence: result.confidence, reason: result.reason || '' });
       }
     } catch (_) {}
   }
@@ -380,6 +382,7 @@ function buildReport(anchor, signatureResults, topContributors, windowEvents) {
   const primary = signatureResults[0];
   const sig = primary?.signature;
   const confidence = primary?.confidence ?? 'low';
+  const confidenceReason = primary?.reason || '';
 
   const anchorDescription = ANCHOR_DESCRIPTIONS[anchor.id] ?? `Event ${anchor.id}`;
 
@@ -388,12 +391,13 @@ function buildReport(anchor, signatureResults, topContributors, windowEvents) {
   const nextSteps = sig?.nextSteps ?? ['Review event details for more information', 'Check System and Application logs for context'];
   const technicianHint = sig?.technicianHint;
 
-  const psaSummary = buildPSASummary(anchor, sig, topContributors, confidence);
+  const psaSummary = buildPSASummary(anchor, sig, topContributors, confidence, confidenceReason);
 
   return {
     what,
     rootCause,
     confidence,
+    confidenceReason,
     nextSteps,
     technicianHint,
     psaSummary,
@@ -416,7 +420,7 @@ function generateGenericRootCause(anchor, contributors) {
   return `Leading event: ${top.provider || 'Unknown'} Event ${top.id} (${top.severity}) recorded shortly before the incident.`;
 }
 
-function buildPSASummary(anchor, sig, contributors, confidence) {
+function buildPSASummary(anchor, sig, contributors, confidence, confidenceReason) {
   const ts = anchor.timestamp.toLocaleString();
   const lines = [
     `INCIDENT SUMMARY`,
@@ -429,7 +433,7 @@ function buildPSASummary(anchor, sig, contributors, confidence) {
     `DIAGNOSIS`,
     `---------`,
     sig ? `Pattern: ${sig.name} (${sig.category})` : 'Pattern: No known pattern matched',
-    `Confidence: ${confidence.toUpperCase()}`,
+    `Confidence: ${confidence.toUpperCase()}${confidenceReason ? ` — ${confidenceReason}` : ''}`,
     ``,
     sig ? `What happened: ${sig.what}` : '',
     sig ? `Root cause: ${sig.rootCause}` : '',

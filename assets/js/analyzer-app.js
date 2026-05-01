@@ -228,7 +228,10 @@ function renderIncidentCard(inc, index) {
           </div>
         </div>
         <div class="incident-header-right">
-          <span class="conf-badge ${confidenceClass}">${confidence} confidence</span>
+          <div class="conf-block">
+            <span class="conf-badge ${confidenceClass}">${confidence} confidence</span>
+            ${report.confidenceReason ? `<span class="conf-reason">${esc(report.confidenceReason)}</span>` : ''}
+          </div>
           <span class="event-id-pill" data-lookup-id="${anchor.id}" title="Look up Event ${anchor.id}">
             Event ${anchor.id}
           </span>
