@@ -28,9 +28,9 @@ const $count   = document.getElementById('count');
 const $detail  = document.getElementById('detail');
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let activeId      = null;
-let activeSeverity = '';
-let checkedSteps  = JSON.parse(localStorage.getItem('ef_steps') || '{}');
+let activeId         = null;
+let activeSeverities = new Set();
+let checkedSteps     = JSON.parse(localStorage.getItem('ef_steps') || '{}');
 function saveSteps() { localStorage.setItem('ef_steps', JSON.stringify(checkedSteps)); }
 
 // ── Query ─────────────────────────────────────────────────────────────────────
@@ -48,20 +48,41 @@ function getResults(query) {
   }
 
   // Apply severity filter
-  if (activeSeverity) {
-    results = results.filter(e => e.severity === activeSeverity);
+  if (activeSeverities.size > 0) {
+    results = results.filter(e => activeSeverities.has(e.severity));
   }
 
   return results;
 }
 
 // ── Render list ───────────────────────────────────────────────────────────────
+const SEV_ORDER = ['Critical', 'Error', 'Warning', 'Info', 'Verbose'];
+
+function buildRow(event) {
+  const row = document.createElement('div');
+  row.className = `result-row${event.id === activeId ? ' active' : ''}`;
+  row.dataset.id = event.id;
+  row.dataset.severity = event.severity;
+  row.innerHTML = `
+    <span class="row-dot dot-${event.severity}"></span>
+    <div class="row-body">
+      <div class="row-top">
+        <span class="row-id">${event.id}</span>
+        <span class="row-channel">${escHtml(event.channel)}</span>
+      </div>
+      <span class="row-title">${escHtml(event.title)}</span>
+    </div>
+  `;
+  row.addEventListener('click', () => selectEvent(event, row));
+  return row;
+}
+
 function render(query) {
   const results = getResults(query);
   const q = query.trim();
 
   // Nothing to show — no query and no filter
-  if (!q && !activeSeverity) {
+  if (!q && activeSeverities.size === 0) {
     $list.innerHTML = '';
     $count.textContent = '';
     showEmptyDetail();
@@ -78,25 +99,33 @@ function render(query) {
   $count.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
   $list.innerHTML = '';
 
-  results.forEach((event, i) => {
-    const row = document.createElement('div');
-    row.className = `result-row${event.id === activeId ? ' active' : ''}`;
-    row.dataset.id = event.id;
-    row.dataset.severity = event.severity;
-    row.innerHTML = `
-      <span class="row-dot dot-${event.severity}"></span>
-      <span class="row-id">${event.id}</span>
-      <span class="row-title">${escHtml(event.title)}</span>
-    `;
-    row.addEventListener('click', () => selectEvent(event, row));
-    $list.appendChild(row);
+  // Group by severity in canonical order
+  const groups = SEV_ORDER
+    .map(sev => ({ sev, items: results.filter(e => e.severity === sev) }))
+    .filter(g => g.items.length > 0);
+
+  const showHeaders = groups.length > 1;
+
+  groups.forEach(({ sev, items }) => {
+    if (showHeaders) {
+      const hdr = document.createElement('div');
+      hdr.className = 'sev-group-header';
+      hdr.dataset.severity = sev;
+      hdr.innerHTML = `
+        <span class="row-dot dot-${sev}"></span>
+        <span class="sev-group-label">${sev}</span>
+        <span class="sev-group-count">${items.length}</span>
+      `;
+      $list.appendChild(hdr);
+    }
+    items.forEach(event => $list.appendChild(buildRow(event)));
   });
 
   // Auto-select first result
   if (!activeId || !results.find(e => e.id === activeId)) {
     const first = results[0];
     const firstRow = $list.querySelector('.result-row');
-    selectEvent(first, firstRow);
+    if (first && firstRow) selectEvent(first, firstRow);
   }
 }
 
@@ -231,13 +260,27 @@ function wireDetail(panel, event) {
   });
 }
 
-// ── Severity filters ──────────────────────────────────────────────────────────
+// ── Severity filters (multi-select) ──────────────────────────────────────────
+function syncFilterUI() {
+  document.querySelectorAll('.filter-tab').forEach(b => {
+    const sev = b.dataset.severity;
+    if (sev === '') b.classList.toggle('active', activeSeverities.size === 0);
+    else b.classList.toggle('active', activeSeverities.has(sev));
+  });
+}
+
 document.querySelectorAll('.filter-tab').forEach(btn => {
   btn.addEventListener('click', () => {
-    activeSeverity = btn.dataset.severity;
+    const sev = btn.dataset.severity;
+    if (sev === '') {
+      activeSeverities.clear();
+    } else if (activeSeverities.has(sev)) {
+      activeSeverities.delete(sev);
+    } else {
+      activeSeverities.add(sev);
+    }
+    syncFilterUI();
     activeId = null;
-    document.querySelectorAll('.filter-tab').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
     render($search.value);
   });
 });
@@ -261,24 +304,23 @@ $search.addEventListener('keydown', e => {
 // ── URL helpers ───────────────────────────────────────────────────────────────
 function updateUrl(q) {
   const url = new URL(window.location);
-  if (q) url.searchParams.set('q', q);
-  else url.searchParams.delete('q');
+  if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
+  if (activeSeverities.size > 0) url.searchParams.set('severity', [...activeSeverities].join(','));
+  else url.searchParams.delete('severity');
   history.replaceState(null, '', url);
 }
 
 // ── Init from URL ─────────────────────────────────────────────────────────────
-const params   = new URLSearchParams(location.search);
-const initQ    = params.get('q') || '';
-const initSev  = params.get('severity') || '';
+const params  = new URLSearchParams(location.search);
+const initQ   = params.get('q') || '';
+const initSev = params.get('severity') || '';
 
 if (initSev) {
-  activeSeverity = initSev;
-  document.querySelectorAll('.filter-tab').forEach(b => {
-    b.classList.toggle('active', b.dataset.severity === initSev);
-  });
+  initSev.split(',').forEach(s => { const t = s.trim(); if (t) activeSeverities.add(t); });
+  syncFilterUI();
 }
 
-if (initQ || initSev) {
+if (initQ || activeSeverities.size > 0) {
   if (initQ) $search.value = initQ;
   render(initQ);
 } else {
