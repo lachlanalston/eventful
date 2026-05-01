@@ -189,6 +189,19 @@ function renderIncidents(incidents) {
 
   $incidentsSection.innerHTML = incidents.map((inc, i) => renderIncidentCard(inc, i)).join('');
 
+  // Wire collapsible headers
+  $incidentsSection.querySelectorAll('.incident-toggle').forEach(header => {
+    header.addEventListener('click', e => {
+      if (e.target.closest('[data-lookup-id]')) return; // let pill handle its own click
+      const card = header.closest('.incident-card');
+      const body = card.querySelector('.incident-body');
+      const chevron = header.querySelector('.incident-chevron');
+      const open = !body.hidden;
+      body.hidden = open;
+      chevron.classList.toggle('open', !open);
+    });
+  });
+
   // Wire up copy buttons
   $incidentsSection.querySelectorAll('.copy-summary-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -220,7 +233,7 @@ function renderIncidentCard(inc, index) {
 
   return `
     <div class="incident-card">
-      <div class="incident-header ${severityClass}">
+      <div class="incident-header ${severityClass} incident-toggle">
         <div class="incident-header-left">
           <span class="incident-icon">${sig?.icon ?? '⚠'}</span>
           <div>
@@ -228,21 +241,20 @@ function renderIncidentCard(inc, index) {
             <div class="incident-meta">
               <span class="incident-time">${anchor.timestamp.toLocaleString()}</span>
               <span class="incident-provider">${esc(anchor.provider)}</span>
+              ${report.confidenceReason ? `<span class="conf-reason">${esc(report.confidenceReason)}</span>` : ''}
             </div>
           </div>
         </div>
         <div class="incident-header-right">
-          <div class="conf-block">
-            <span class="conf-badge ${confidenceClass}">${confidence} confidence</span>
-            ${report.confidenceReason ? `<span class="conf-reason">${esc(report.confidenceReason)}</span>` : ''}
-          </div>
+          <span class="conf-badge ${confidenceClass}">${confidence}</span>
           <span class="event-id-pill" data-lookup-id="${anchor.id}" title="Look up Event ${anchor.id}">
-            Event ${anchor.id}
+            EVT-${anchor.id}
           </span>
+          <span class="incident-chevron">▶</span>
         </div>
       </div>
 
-      <div class="incident-body">
+      <div class="incident-body" hidden>
         <!-- What happened -->
         <div class="incident-section">
           <div class="incident-section-label">What happened</div>
