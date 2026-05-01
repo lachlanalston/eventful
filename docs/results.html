@@ -6,10 +6,10 @@
   <title>Results — Eventful</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/results-DawEVusc.js"></script>
+  <script type="module" crossorigin src="./assets/results-D2kzmxm0.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/theme-CCBoUXgy.js">
   <link rel="modulepreload" crossorigin href="./assets/index-BAM9NZ7H.js">
-  <link rel="stylesheet" crossorigin href="./assets/results-o4MCfHXz.css">
+  <link rel="stylesheet" crossorigin href="./assets/results-DqFcKJrk.css">
 </head>
 <body>
 
@@ -32,14 +32,36 @@
   <div class="layout">
 
     <aside class="sidebar">
-      <!-- Severity filter tab bar -->
-      <div class="filter-bar">
-        <button class="filter-tab active" data-severity="">All</button>
-        <button class="filter-tab" data-severity="Critical">Critical</button>
-        <button class="filter-tab" data-severity="Error">Error</button>
-        <button class="filter-tab" data-severity="Warning">Warning</button>
-        <button class="filter-tab" data-severity="Info">Info</button>
-        <button class="filter-tab" data-severity="Verbose">Verbose</button>
+      <!-- Severity filter chips -->
+      <div class="sev-filter-bar">
+        <span class="sev-filter-label">Severity</span>
+        <div class="sev-chips">
+          <label class="sev-chip" data-severity="Critical">
+            <input type="checkbox" class="sev-cb" value="Critical" />
+            <span class="chip-dot dot-Critical"></span>
+            <span>Critical</span>
+          </label>
+          <label class="sev-chip" data-severity="Error">
+            <input type="checkbox" class="sev-cb" value="Error" />
+            <span class="chip-dot dot-Error"></span>
+            <span>Error</span>
+          </label>
+          <label class="sev-chip" data-severity="Warning">
+            <input type="checkbox" class="sev-cb" value="Warning" />
+            <span class="chip-dot dot-Warning"></span>
+            <span>Warning</span>
+          </label>
+          <label class="sev-chip" data-severity="Info">
+            <input type="checkbox" class="sev-cb" value="Info" />
+            <span class="chip-dot dot-Info"></span>
+            <span>Info</span>
+          </label>
+          <label class="sev-chip" data-severity="Verbose">
+            <input type="checkbox" class="sev-cb" value="Verbose" />
+            <span class="chip-dot dot-Verbose"></span>
+            <span>Verbose</span>
+          </label>
+        </div>
       </div>
       <div id="count" class="result-count"></div>
       <div id="list" class="result-list"></div>

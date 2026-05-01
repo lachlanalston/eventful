@@ -260,25 +260,18 @@ function wireDetail(panel, event) {
   });
 }
 
-// ── Severity filters (multi-select) ──────────────────────────────────────────
+// ── Severity filters (multi-select checkboxes) ───────────────────────────────
 function syncFilterUI() {
-  document.querySelectorAll('.filter-tab').forEach(b => {
-    const sev = b.dataset.severity;
-    if (sev === '') b.classList.toggle('active', activeSeverities.size === 0);
-    else b.classList.toggle('active', activeSeverities.has(sev));
+  document.querySelectorAll('.sev-cb').forEach(cb => {
+    cb.checked = activeSeverities.has(cb.value);
+    cb.closest('.sev-chip').classList.toggle('active', cb.checked);
   });
 }
 
-document.querySelectorAll('.filter-tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const sev = btn.dataset.severity;
-    if (sev === '') {
-      activeSeverities.clear();
-    } else if (activeSeverities.has(sev)) {
-      activeSeverities.delete(sev);
-    } else {
-      activeSeverities.add(sev);
-    }
+document.querySelectorAll('.sev-cb').forEach(cb => {
+  cb.addEventListener('change', () => {
+    if (cb.checked) activeSeverities.add(cb.value);
+    else activeSeverities.delete(cb.value);
     syncFilterUI();
     activeId = null;
     render($search.value);
