@@ -336,6 +336,38 @@
    LEARN MORE
 ══════════════════════════════════════════════════════ */
 
+/* ── Analyzer hint strip (shown on crash-related event cards) ── */
+.analyzer-hint-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: rgba(245,158,11,0.04);
+  border-top: 1px solid rgba(245,158,11,0.12);
+  flex-wrap: wrap;
+}
+
+.ahs-icon { font-size: 14px; flex-shrink: 0; }
+
+.ahs-text {
+  font-size: 12px;
+  color: var(--text3);
+  flex: 1;
+}
+
+.ahs-link {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: opacity 0.15s;
+}
+
+.ahs-link:hover { opacity: 0.75; }
+
 .learn-more { border-top: 1px solid var(--border); background: var(--surface2); }
 
 .learn-more-toggle {

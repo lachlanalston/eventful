@@ -213,7 +213,40 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .result-list {
   flex: 1;
   overflow-y: auto;
-  padding-bottom: 16px;
+  padding-bottom: 0;
+}
+
+/* Sidebar Incident Analyzer CTA */
+.sidebar-analyzer-cta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  text-decoration: none;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.sidebar-analyzer-cta:hover { background: var(--surface2); }
+
+.sac-icon { font-size: 18px; flex-shrink: 0; }
+
+.sac-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sac-text strong {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.sac-text span {
+  font-size: 11px;
+  color: var(--amber);
 }
 
 .result-list::-webkit-scrollbar { width: 3px; }

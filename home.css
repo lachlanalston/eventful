@@ -38,13 +38,41 @@ body {
 
 /* ── Header ── */
 .site-header {
-  padding: 14px 28px;
+  padding: 0 28px;
+  height: 52px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 100;
 }
 
 .logo { display: none; }
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--amber);
+  letter-spacing: -0.5px;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.header-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+}
 
 .home-nav {
   display: flex;
@@ -56,13 +84,13 @@ body {
   font-size: 13px;
   font-weight: 500;
   color: var(--text2);
-  padding: 5px 12px;
-  border-radius: 7px;
+  padding: 5px 10px;
+  border-radius: 6px;
   text-decoration: none;
   transition: color 0.15s, background 0.15s;
 }
 
-.home-nav-link:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.home-nav-link:hover { color: var(--text); background: rgba(255,255,255,0.06); }
 [data-theme="light"] .home-nav-link:hover { background: rgba(0,0,0,0.05); }
 
 .theme-btn {
@@ -248,10 +276,67 @@ h1 {
   color: var(--text3);
 }
 
+/* ── Analyzer CTA ── */
+.analyzer-cta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 28px;
+  padding: 14px 18px;
+  background: rgba(245,158,11,0.05);
+  border: 1px solid rgba(245,158,11,0.18);
+  border-radius: 12px;
+  text-align: left;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cta-icon { font-size: 22px; flex-shrink: 0; }
+
+.cta-body {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cta-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.cta-desc {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+.cta-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--amber);
+  border: 1px solid rgba(245,158,11,0.35);
+  border-radius: 8px;
+  padding: 7px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cta-btn:hover {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.5);
+}
+
 /* ── Mobile ── */
 @media (max-width: 520px) {
-  .site-header { padding: 20px 20px; }
+  .site-header { padding: 0 16px; }
   h1 { font-size: 36px; letter-spacing: -1.5px; }
   .hero { padding: 20px 16px 60px; }
   .site-footer { padding: 20px 16px; }
+  .home-nav-link { display: none; }
+  .home-nav-link:first-child { display: block; }
 }

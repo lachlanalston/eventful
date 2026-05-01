@@ -11,24 +11,21 @@ initTheme();
 document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', toggleTheme));
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
-const $uploadSection     = document.getElementById('upload-section');
-const $processingSection = document.getElementById('processing-section');
-const $resultsSection    = document.getElementById('results-section');
-const $dropZone          = document.getElementById('drop-zone');
-const $fileInput         = document.getElementById('file-input');
-const $processingText    = document.getElementById('processing-text');
-const $overviewGrid      = document.getElementById('overview-grid');
-const $incidentsSection  = document.getElementById('incidents-section');
-const $eventTableWrap    = document.getElementById('event-table-wrap');
-const $eventFilter       = document.getElementById('event-filter');
-const $severityFilter    = document.getElementById('severity-filter');
-const $newAnalysisBtn    = document.getElementById('new-analysis-btn');
-const $resultsSub        = document.getElementById('results-sub');
+const $uploadSection      = document.getElementById('upload-section');
+const $processingSection  = document.getElementById('processing-section');
+const $resultsSection     = document.getElementById('results-section');
+const $dropZone           = document.getElementById('drop-zone');
+const $fileInput          = document.getElementById('file-input');
+const $processingText     = document.getElementById('processing-text');
+const $overviewGrid       = document.getElementById('overview-grid');
+const $incidentsSection   = document.getElementById('incidents-section');
+const $eventTableWrap     = document.getElementById('event-table-wrap');
+const $eventLogFiltersWrap = document.getElementById('event-log-filters-wrap');
+const $newAnalysisBtn     = document.getElementById('new-analysis-btn');
+const $resultsSub         = document.getElementById('results-sub');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let allParsedEvents = [];
-let eventFilterQuery = '';
-let eventFilterSeverity = '';
 
 // ── File Upload ───────────────────────────────────────────────────────────────
 $fileInput?.addEventListener('change', e => {
@@ -342,87 +339,287 @@ function renderMiniTimeline(events, anchor) {
 
 const LOOKBACK_MINUTES = 15;
 
+// ── Table State & Constants ───────────────────────────────────────────────────
+const NOISY_PROVIDERS = new Set([
+  'Microsoft-Windows-TaskScheduler',
+  'Microsoft-Windows-WindowsUpdateClient',
+  'Microsoft-Windows-Bits-Client',
+  'Microsoft-Windows-GroupPolicy',
+  'Microsoft-Windows-UserPnp',
+  'Microsoft-Windows-WER-SystemErrorReporting',
+  'Microsoft-Windows-Diagnostics-Performance',
+  'Microsoft-Windows-DistributedCOM',
+  'Microsoft-Windows-Security-SPP',
+  'Microsoft-Windows-Defrag',
+  'Microsoft-Windows-Power-Troubleshooter',
+]);
+
+const SEVERITY_ORDER = { Critical: 0, Error: 1, Warning: 2, Info: 3, Verbose: 4 };
+
+const tbl = {
+  sortCol: 'timestamp', sortDir: 'asc',
+  page: 0, pageSize: 100,
+  query: '', severity: '', provider: '', channel: '',
+  fromTime: '', toTime: '',
+  hideNoisy: false,
+  expandedIds: new Set(),
+};
+
 // ── Event Table ───────────────────────────────────────────────────────────────
 function renderEventTable(events) {
-  if (!$eventTableWrap) return;
+  if (!$eventLogFiltersWrap || !$eventTableWrap) return;
 
-  eventFilterQuery = '';
-  eventFilterSeverity = '';
-  if ($eventFilter) $eventFilter.value = '';
-  if ($severityFilter) $severityFilter.value = '';
+  // Reset state
+  Object.assign(tbl, {
+    sortCol: 'timestamp', sortDir: 'asc', page: 0,
+    query: '', severity: '', provider: '', channel: '',
+    fromTime: '', toTime: '', hideNoisy: false,
+    expandedIds: new Set(),
+  });
 
-  redrawTable(events);
+  const providers = [...new Set(events.map(e => e.provider).filter(Boolean))].sort();
+  const channels  = [...new Set(events.map(e => e.channel).filter(Boolean))].sort();
+  const toLocalISO = d => d ? new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
+  const minTime = events[0]?.timestamp;
+  const maxTime = events[events.length - 1]?.timestamp;
+
+  $eventLogFiltersWrap.innerHTML = `
+    <div class="event-log-filters">
+      <input type="search" id="tbl-query" class="filter-control filter-control-search"
+        placeholder="Search ID, provider, message…" autocomplete="off" spellcheck="false" />
+
+      <select id="tbl-severity" class="filter-control filter-control-select">
+        <option value="">All severities</option>
+        <option>Critical</option><option>Error</option>
+        <option>Warning</option><option>Info</option><option>Verbose</option>
+      </select>
+
+      <select id="tbl-provider" class="filter-control filter-control-select">
+        <option value="">All providers</option>
+        ${providers.map(p => `<option value="${esc(p)}">${esc(shortProvider(p))}</option>`).join('')}
+      </select>
+
+      <select id="tbl-channel" class="filter-control filter-control-select">
+        <option value="">All channels</option>
+        ${channels.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+      </select>
+
+      <div class="filter-date-group">
+        <span class="filter-date-label">From</span>
+        <input type="datetime-local" id="tbl-from" class="filter-control filter-control-date"
+          value="${toLocalISO(minTime)}" />
+      </div>
+      <div class="filter-date-group">
+        <span class="filter-date-label">To</span>
+        <input type="datetime-local" id="tbl-to" class="filter-control filter-control-date"
+          value="${toLocalISO(maxTime)}" />
+      </div>
+
+      <div class="filter-spacer"></div>
+      <button id="tbl-noise" class="filter-noise-btn">Hide noise</button>
+      <button id="tbl-csv"   class="filter-csv-btn">↓ CSV</button>
+    </div>
+  `;
+
+  const on = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
+  on('tbl-query',    'input',  e => { tbl.query    = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-severity', 'change', e => { tbl.severity = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-provider', 'change', e => { tbl.provider = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-channel',  'change', e => { tbl.channel  = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-from',     'change', e => { tbl.fromTime = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-to',       'change', e => { tbl.toTime   = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-noise', 'click', e => {
+    tbl.hideNoisy = !tbl.hideNoisy;
+    tbl.page = 0;
+    e.target.classList.toggle('active', tbl.hideNoisy);
+    e.target.textContent = tbl.hideNoisy ? 'Show noise' : 'Hide noise';
+    redrawTable();
+  });
+  on('tbl-csv', 'click', () => exportCSV(filteredSortedEvents()));
+
+  redrawTable();
 }
 
-function redrawTable(events) {
-  const q = eventFilterQuery.toLowerCase();
-  const sev = eventFilterSeverity;
+function filteredSortedEvents() {
+  const q      = tbl.query.toLowerCase();
+  const fromMs = tbl.fromTime ? new Date(tbl.fromTime).getTime() : null;
+  const toMs   = tbl.toTime   ? new Date(tbl.toTime).getTime()   : null;
 
-  const filtered = events.filter(e => {
-    if (sev && e.severity !== sev) return false;
+  let events = allParsedEvents.filter(e => {
+    if (tbl.severity && e.severity !== tbl.severity) return false;
+    if (tbl.provider && e.provider !== tbl.provider) return false;
+    if (tbl.channel  && e.channel  !== tbl.channel)  return false;
+    if (fromMs !== null && e.timestamp < fromMs) return false;
+    if (toMs   !== null && e.timestamp > toMs)   return false;
+    if (tbl.hideNoisy && NOISY_PROVIDERS.has(e.provider)) return false;
     if (q) {
-      const haystack = `${e.id} ${e.provider} ${e.channel} ${e.message} ${e.severity}`.toLowerCase();
-      if (!haystack.includes(q)) return false;
+      const hay = `${e.id} ${e.provider} ${e.channel} ${e.message} ${e.severity}`.toLowerCase();
+      if (!hay.includes(q)) return false;
     }
     return true;
   });
 
-  if (!filtered.length) {
-    $eventTableWrap.innerHTML = `<div class="table-empty">No events match the current filter.</div>`;
+  events.sort((a, b) => {
+    let v = 0;
+    switch (tbl.sortCol) {
+      case 'timestamp': v = a.timestamp - b.timestamp; break;
+      case 'severity':  v = (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9); break;
+      case 'id':        v = a.id - b.id; break;
+      case 'provider':  v = (a.provider || '').localeCompare(b.provider || ''); break;
+    }
+    return tbl.sortDir === 'asc' ? v : -v;
+  });
+
+  return events;
+}
+
+function redrawTable() {
+  if (!$eventTableWrap) return;
+  const filtered = filteredSortedEvents();
+  const total    = filtered.length;
+  const maxPage  = Math.max(0, Math.ceil(total / tbl.pageSize) - 1);
+  tbl.page = Math.min(tbl.page, maxPage);
+  const start    = tbl.page * tbl.pageSize;
+  const pageRows = filtered.slice(start, start + tbl.pageSize);
+
+  if (!total) {
+    $eventTableWrap.innerHTML = `<div class="table-empty">No events match the current filters.</div>`;
     return;
   }
 
-  const MAX_ROWS = 500;
-  const truncated = filtered.length > MAX_ROWS;
-  const rows = filtered.slice(0, MAX_ROWS);
+  const sortArrow = col =>
+    `<span class="sort-arrow ${tbl.sortCol === col ? 'active' : ''}">${tbl.sortCol === col ? (tbl.sortDir === 'asc' ? '↑' : '↓') : '↕'}</span>`;
+  const thCls = col => tbl.sortCol === col ? 'sort-active' : '';
 
   $eventTableWrap.innerHTML = `
-    ${truncated ? `<div class="table-notice">Showing first ${MAX_ROWS} of ${filtered.length.toLocaleString()} matching events.</div>` : ''}
+    <div class="table-info-bar">
+      <span class="table-count-text">
+        ${(start + 1).toLocaleString()}–${Math.min(start + tbl.pageSize, total).toLocaleString()} of ${total.toLocaleString()} event${total !== 1 ? 's' : ''}
+        ${total < allParsedEvents.length ? ` (${allParsedEvents.length.toLocaleString()} total)` : ''}
+      </span>
+      <div class="table-pagination">
+        <button class="page-btn" id="pg-first" ${tbl.page === 0 ? 'disabled' : ''}>«</button>
+        <button class="page-btn" id="pg-prev"  ${tbl.page === 0 ? 'disabled' : ''}>‹ Prev</button>
+        <span class="page-info">Page ${tbl.page + 1} / ${maxPage + 1}</span>
+        <button class="page-btn" id="pg-next"  ${tbl.page >= maxPage ? 'disabled' : ''}>Next ›</button>
+        <button class="page-btn" id="pg-last"  ${tbl.page >= maxPage ? 'disabled' : ''}>»</button>
+      </div>
+    </div>
     <table class="event-table">
-      <thead>
-        <tr>
-          <th>Time</th>
-          <th>Sev</th>
-          <th>ID</th>
-          <th>Provider</th>
-          <th>Channel</th>
-          <th>Message</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(ev => `
-          <tr class="ev-row-${ev.severity.toLowerCase()}">
-            <td class="ev-col-time">${formatDateTime(ev.timestamp)}</td>
-            <td><span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span></td>
-            <td>
-              <span class="table-event-id" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">
-                ${ev.id}
-              </span>
-            </td>
-            <td class="ev-col-provider">${esc(shortProvider(ev.provider))}</td>
-            <td class="ev-col-channel">${esc(ev.channel)}</td>
-            <td class="ev-col-message">${esc(ev.message.substring(0, 120))}</td>
-          </tr>
-        `).join('')}
-      </tbody>
+      <thead><tr>
+        <th style="width:18px"></th>
+        <th data-sort="timestamp" class="${thCls('timestamp')}">Time ${sortArrow('timestamp')}</th>
+        <th data-sort="severity"  class="${thCls('severity')}">Sev ${sortArrow('severity')}</th>
+        <th data-sort="id"        class="${thCls('id')}">ID ${sortArrow('id')}</th>
+        <th data-sort="provider"  class="${thCls('provider')}">Provider ${sortArrow('provider')}</th>
+        <th>Channel</th>
+        <th>Message</th>
+      </tr></thead>
+      <tbody>${pageRows.map(ev => buildTableRow(ev)).join('')}</tbody>
     </table>
   `;
 
-  // Wire up event ID lookup links in table
-  $eventTableWrap.querySelectorAll('[data-lookup-id]').forEach(el => {
-    el.addEventListener('click', () => window.open(`results.html?q=${el.dataset.lookupId}`, '_blank'));
+  // Sort clicks
+  $eventTableWrap.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.sort;
+      tbl.sortDir = tbl.sortCol === col && tbl.sortDir === 'asc' ? 'desc' : 'asc';
+      tbl.sortCol = col;
+      tbl.page = 0;
+      redrawTable();
+    });
+  });
+
+  // Pagination
+  const pg = (id, fn) => document.getElementById(id)?.addEventListener('click', fn);
+  pg('pg-first', () => { tbl.page = 0;       redrawTable(); });
+  pg('pg-prev',  () => { tbl.page--;          redrawTable(); });
+  pg('pg-next',  () => { tbl.page++;          redrawTable(); });
+  pg('pg-last',  () => { tbl.page = maxPage;  redrawTable(); });
+
+  // Row expand/collapse
+  $eventTableWrap.querySelectorAll('tbody tr[data-record]').forEach(tr => {
+    tr.addEventListener('click', e => {
+      if (e.target.closest('.table-event-id')) return;
+      const rid = parseInt(tr.dataset.record, 10);
+      if (tbl.expandedIds.has(rid)) tbl.expandedIds.delete(rid);
+      else tbl.expandedIds.add(rid);
+      redrawTable();
+    });
+  });
+
+  // Event ID lookup links
+  $eventTableWrap.querySelectorAll('.table-event-id').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      window.open(`results.html?q=${el.dataset.lookupId}`, '_blank');
+    });
   });
 }
 
-$eventFilter?.addEventListener('input', e => {
-  eventFilterQuery = e.target.value;
-  redrawTable(allParsedEvents);
-});
+function buildTableRow(ev) {
+  const isExpanded = tbl.expandedIds.has(ev.recordId);
+  const sev = ev.severity.toLowerCase();
+  const dataKeys = Object.keys(ev.data || {});
 
-$severityFilter?.addEventListener('change', e => {
-  eventFilterSeverity = e.target.value;
-  redrawTable(allParsedEvents);
-});
+  const mainRow = `
+    <tr class="ev-row-${sev}${isExpanded ? ' row-expanded' : ''}" data-record="${ev.recordId}">
+      <td class="ev-col-expand">${isExpanded ? '▼' : '▶'}</td>
+      <td class="ev-col-time">${formatDateTime(ev.timestamp)}</td>
+      <td><span class="sev-badge sev-badge-${sev}">${ev.severity}</span></td>
+      <td><span class="table-event-id" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">${ev.id}</span></td>
+      <td class="ev-col-provider" title="${esc(ev.provider)}">${esc(shortProvider(ev.provider))}</td>
+      <td class="ev-col-channel">${esc(ev.channel)}</td>
+      <td class="ev-col-message">${esc(ev.message.substring(0, 150))}</td>
+    </tr>`;
+
+  if (!isExpanded) return mainRow;
+
+  return mainRow + `
+    <tr class="ev-detail-row">
+      <td colspan="7">
+        <div class="ev-detail-inner">
+          <div class="ev-detail-message">${esc(ev.message || '(no message)')}</div>
+          <div class="ev-detail-meta">
+            ${[['Provider', ev.provider], ['Channel', ev.channel], ['Computer', ev.computer], ['Record ID', ev.recordId || '—']]
+              .filter(([, v]) => v)
+              .map(([k, v]) => `<div class="ev-detail-field"><span class="ev-detail-key">${k}</span><span class="ev-detail-val">${esc(String(v))}</span></div>`)
+              .join('')}
+          </div>
+          ${dataKeys.length ? `
+          <div class="ev-detail-data">
+            <div class="ev-detail-data-title">Event Data</div>
+            ${dataKeys.map(k => `
+              <div class="ev-detail-data-row">
+                <span class="ev-detail-data-key">${esc(k)}</span>
+                <span class="ev-detail-data-val">${esc(String(ev.data[k]))}</span>
+              </div>`).join('')}
+          </div>` : ''}
+          <div class="ev-detail-actions">
+            <span class="ev-detail-lookup-btn table-event-id" data-lookup-id="${ev.id}">
+              Look up Event ${ev.id} →
+            </span>
+          </div>
+        </div>
+      </td>
+    </tr>`;
+}
+
+function exportCSV(events) {
+  const cols = ['Time (UTC)', 'Severity', 'EventID', 'Provider', 'Channel', 'Computer', 'RecordID', 'Message'];
+  const q = s => `"${String(s ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+  const rows = events.map(e => [
+    e.timestamp.toISOString(), e.severity, e.id,
+    q(e.provider), q(e.channel), q(e.computer), e.recordId, q(e.message),
+  ].join(','));
+  const csv = [cols.join(','), ...rows].join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  const a = Object.assign(document.createElement('a'), {
+    href: url, download: `eventful-${new Date().toISOString().slice(0, 10)}.csv`,
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
 
 // ── Error Display ─────────────────────────────────────────────────────────────
 function showUploadError(msg) {

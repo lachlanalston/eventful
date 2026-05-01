@@ -81,29 +81,10 @@
     <!-- Incidents -->
     <div id="incidents-section"></div>
 
-    <!-- All events table -->
+    <!-- All events table — filters and table injected by JS -->
     <div class="event-log-section">
-      <div class="section-header">
-        <h3>All Events</h3>
-        <div class="event-log-controls">
-          <input
-            type="search"
-            id="event-filter"
-            class="event-filter-input"
-            placeholder="Filter by ID, provider, message…"
-            autocomplete="off"
-            spellcheck="false"
-          />
-          <select id="severity-filter" class="event-filter-select">
-            <option value="">All severities</option>
-            <option value="Critical">Critical</option>
-            <option value="Error">Error</option>
-            <option value="Warning">Warning</option>
-            <option value="Info">Info</option>
-            <option value="Verbose">Verbose</option>
-          </select>
-        </div>
-      </div>
+      <h2 class="section-heading">All Events</h2>
+      <div id="event-log-filters-wrap"></div>
       <div id="event-table-wrap"></div>
     </div>
 

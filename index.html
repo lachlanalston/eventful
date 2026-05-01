@@ -14,10 +14,14 @@
   <div class="page">
 
     <header class="site-header">
-      <nav class="home-nav">
-        <a href="results.html" class="home-nav-link">Event Lookup</a>
-        <a href="analyzer.html" class="home-nav-link">Incident Analyzer</a>
-      </nav>
+      <div class="header-left">
+        <a href="index.html" class="header-logo">Eventful</a>
+        <div class="header-divider"></div>
+        <nav class="home-nav">
+          <a href="results.html" class="home-nav-link">Event Lookup</a>
+          <a href="analyzer.html" class="home-nav-link">Incident Analyzer</a>
+        </nav>
+      </div>
       <button class="theme-btn" title="Toggle theme">☀</button>
     </header>
 
@@ -60,6 +64,15 @@
           <a href="results.html?q=service+crashed" class="chip">service crashed</a>
           <a href="results.html?q=4625" class="chip">Event 4625</a>
           <a href="results.html?q=4740" class="chip">Event 4740</a>
+        </div>
+
+        <div class="analyzer-cta">
+          <div class="cta-icon">🔬</div>
+          <div class="cta-body">
+            <strong class="cta-title">Have a crash or incident log?</strong>
+            <span class="cta-desc">Drop a Windows Event Viewer XML export for instant root cause analysis.</span>
+          </div>
+          <a href="analyzer.html" class="cta-btn">Incident Analyzer →</a>
         </div>
 
       </div>

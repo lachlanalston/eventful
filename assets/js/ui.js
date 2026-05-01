@@ -109,6 +109,9 @@ function buildResultRow(event, isExpanded, onToggle, onRelatedClick) {
   return row;
 }
 
+// Event IDs commonly found in crash/incident logs → show Incident Analyzer hint
+const CRASH_RELATED_IDS = new Set([41, 6008, 1001, 1000, 1002, 4101, 7, 11, 51, 55, 7031, 7034, 7022, 7023, 7024]);
+
 // ─── Full event card (expanded content) ──────────────────────────────────────
 function buildEventCard(event, onRelatedClick) {
   const skill = SKILL_META[event.skill_level] || {};
@@ -179,6 +182,14 @@ function buildEventCard(event, onRelatedClick) {
       <h3 class="section-label">Related Events</h3>
       <div class="related-pills">${relatedPills}</div>
     </section>
+
+    ${CRASH_RELATED_IDS.has(event.id) ? `
+    <div class="analyzer-hint-strip">
+      <span class="ahs-icon">🔬</span>
+      <span class="ahs-text">This event commonly appears in crash &amp; incident logs.</span>
+      <a href="analyzer.html" class="ahs-link">Analyze a log file →</a>
+    </div>
+    ` : ''}
 
     <details class="learn-more">
       <summary class="learn-more-toggle">Learn More <span class="lm-arrow">▶</span></summary>

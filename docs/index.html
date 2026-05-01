@@ -7,19 +7,23 @@
   <meta name="description" content="Instant Windows Event ID lookup for MSP technicians. Search by symptom or event ID." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/home-CF2iJykE.js"></script>
+  <script type="module" crossorigin src="./assets/home-o3UtdMG-.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/theme-CCBoUXgy.js">
-  <link rel="stylesheet" crossorigin href="./assets/home-CRvxmbj8.css">
+  <link rel="stylesheet" crossorigin href="./assets/home-Cxh6RAc1.css">
 </head>
 <body>
 
   <div class="page">
 
     <header class="site-header">
-      <nav class="home-nav">
-        <a href="results.html" class="home-nav-link">Event Lookup</a>
-        <a href="analyzer.html" class="home-nav-link">Incident Analyzer</a>
-      </nav>
+      <div class="header-left">
+        <a href="index.html" class="header-logo">Eventful</a>
+        <div class="header-divider"></div>
+        <nav class="home-nav">
+          <a href="results.html" class="home-nav-link">Event Lookup</a>
+          <a href="analyzer.html" class="home-nav-link">Incident Analyzer</a>
+        </nav>
+      </div>
       <button class="theme-btn" title="Toggle theme">☀</button>
     </header>
 
@@ -62,6 +66,15 @@
           <a href="results.html?q=service+crashed" class="chip">service crashed</a>
           <a href="results.html?q=4625" class="chip">Event 4625</a>
           <a href="results.html?q=4740" class="chip">Event 4740</a>
+        </div>
+
+        <div class="analyzer-cta">
+          <div class="cta-icon">🔬</div>
+          <div class="cta-body">
+            <strong class="cta-title">Have a crash or incident log?</strong>
+            <span class="cta-desc">Drop a Windows Event Viewer XML export for instant root cause analysis.</span>
+          </div>
+          <a href="analyzer.html" class="cta-btn">Incident Analyzer →</a>
         </div>
 
       </div>
