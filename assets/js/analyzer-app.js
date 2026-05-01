@@ -365,7 +365,7 @@ const SEVERITY_ORDER = { Critical: 0, Error: 1, Warning: 2, Info: 3, Verbose: 4 
 const tbl = {
   sortCol: 'timestamp', sortDir: 'asc',
   page: 0, pageSize: 100,
-  query: '', severity: '', provider: '', channel: '',
+  query: '', severities: new Set(), provider: '', channel: '',
   fromTime: '', toTime: '',
   hideNoisy: false,
   expandedIds: new Set(),
@@ -378,7 +378,7 @@ function renderEventTable(events) {
   // Reset state
   Object.assign(tbl, {
     sortCol: 'timestamp', sortDir: 'asc', page: 0,
-    query: '', severity: '', provider: '', channel: '',
+    query: '', severities: new Set(), provider: '', channel: '',
     fromTime: '', toTime: '', hideNoisy: false,
     expandedIds: new Set(),
   });
@@ -394,11 +394,14 @@ function renderEventTable(events) {
       <input type="search" id="tbl-query" class="filter-control filter-control-search"
         placeholder="Search ID, provider, message…" autocomplete="off" spellcheck="false" />
 
-      <select id="tbl-severity" class="filter-control filter-control-select">
-        <option value="">All severities</option>
-        <option>Critical</option><option>Error</option>
-        <option>Warning</option><option>Info</option><option>Verbose</option>
-      </select>
+      <div class="tbl-sev-chips">
+        ${['Critical','Error','Warning','Info','Verbose'].map(s => `
+          <label class="sev-chip" data-severity="${s}">
+            <input type="checkbox" class="sev-cb tbl-sev-cb" value="${s}" />
+            <span class="chip-dot dot-${s}"></span>
+            <span>${s}</span>
+          </label>`).join('')}
+      </div>
 
       <select id="tbl-provider" class="filter-control filter-control-select">
         <option value="">All providers</option>
@@ -429,7 +432,15 @@ function renderEventTable(events) {
 
   const on = (id, evt, fn) => document.getElementById(id)?.addEventListener(evt, fn);
   on('tbl-query',    'input',  e => { tbl.query    = e.target.value; tbl.page = 0; redrawTable(); });
-  on('tbl-severity', 'change', e => { tbl.severity = e.target.value; tbl.page = 0; redrawTable(); });
+  $eventLogFiltersWrap.querySelectorAll('.tbl-sev-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) tbl.severities.add(cb.value);
+      else tbl.severities.delete(cb.value);
+      cb.closest('.sev-chip').classList.toggle('active', cb.checked);
+      tbl.page = 0;
+      redrawTable();
+    });
+  });
   on('tbl-provider', 'change', e => { tbl.provider = e.target.value; tbl.page = 0; redrawTable(); });
   on('tbl-channel',  'change', e => { tbl.channel  = e.target.value; tbl.page = 0; redrawTable(); });
   on('tbl-from',     'change', e => { tbl.fromTime = e.target.value; tbl.page = 0; redrawTable(); });
@@ -452,7 +463,7 @@ function filteredSortedEvents() {
   const toMs   = tbl.toTime   ? new Date(tbl.toTime).getTime()   : null;
 
   let events = allParsedEvents.filter(e => {
-    if (tbl.severity && e.severity !== tbl.severity) return false;
+    if (tbl.severities.size > 0 && !tbl.severities.has(e.severity)) return false;
     if (tbl.provider && e.provider !== tbl.provider) return false;
     if (tbl.channel  && e.channel  !== tbl.channel)  return false;
     if (fromMs !== null && e.timestamp < fromMs) return false;
