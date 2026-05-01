@@ -276,11 +276,9 @@ function renderIncidentCard(inc, index) {
           <div class="incident-section-label">Contributing events (${topContributors.length} found)</div>
           <div class="evidence-list">
             ${topContributors.slice(0, 6).map(({ event, score }) => `
-              <div class="evidence-item">
+              <div class="evidence-item" data-lookup-id="${event.id}" title="Look up Event ${event.id}">
                 <span class="ev-sev-dot sev-${event.severity.toLowerCase()}"></span>
-                <span class="ev-id" data-lookup-id="${event.id}" title="Look up Event ${event.id}">
-                  ${event.id}
-                </span>
+                <span class="ev-id">${event.id}</span>
                 <span class="ev-provider">${esc(shortProvider(event.provider))}</span>
                 <span class="ev-time">${formatTime(event.timestamp)}</span>
                 <span class="ev-score" title="Relevance score">${score}</span>
@@ -346,11 +344,11 @@ function renderMiniTimeline(events, anchor) {
           }
           const isAnchor = ev === anchor;
           return `
-            <div class="timeline-item ${isAnchor ? 'timeline-anchor' : ''}">
+            <div class="timeline-item ${isAnchor ? 'timeline-anchor' : ''}" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">
               <div class="tl-dot sev-${ev.severity?.toLowerCase()}"></div>
               <div class="tl-content">
                 <span class="tl-time">${formatTime(ev.timestamp)}</span>
-                <span class="tl-id" data-lookup-id="${ev.id}">${ev.id}</span>
+                <span class="tl-id">${ev.id}</span>
                 <span class="tl-provider">${esc(shortProvider(ev.provider))}</span>
                 ${isAnchor ? '<span class="tl-anchor-label">ANCHOR</span>' : ''}
               </div>
@@ -489,8 +487,13 @@ function filteredSortedEvents() {
     if (toMs   !== null && e.timestamp > toMs)   return false;
     if (tbl.hideNoisy && NOISY_PROVIDERS.has(e.provider)) return false;
     if (q) {
-      const hay = `${e.id} ${e.provider} ${e.channel} ${e.message} ${e.severity}`.toLowerCase();
-      if (!hay.includes(q)) return false;
+      const exactId = /^\d+$/.test(q) ? parseInt(q, 10) : null;
+      if (exactId !== null) {
+        if (e.id !== exactId) return false;
+      } else {
+        const hay = `${e.id} ${e.provider} ${e.channel} ${e.message} ${e.severity}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
     }
     return true;
   });
@@ -774,6 +777,24 @@ function openLookupPanel(eventId) {
       btn.textContent = open ? 'Advanced ▲' : 'Advanced ▼';
     });
   });
+
+  // Wire "Show all in log" button
+  $body.querySelectorAll('.lp-show-in-log').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const filterId = btn.dataset.filterId;
+      closeLookupPanel();
+      document.querySelectorAll('.analyzer-tab').forEach(t => t.classList.remove('active'));
+      const eventsTab = document.querySelector('.analyzer-tab[data-tab="events"]');
+      if (eventsTab) eventsTab.classList.add('active');
+      document.getElementById('incidents-section').hidden = true;
+      document.getElementById('events-panel').hidden = false;
+      tbl.query = filterId;
+      tbl.page = 0;
+      const qi = document.getElementById('tbl-query');
+      if (qi) qi.value = filterId;
+      redrawTable();
+    });
+  });
 }
 
 function closeLookupPanel() {
@@ -916,6 +937,7 @@ function buildPanelContent(id, dbEntry, rawMatches) {
       ${rawMatches.length > 3
         ? `<div class="lp-raw-more">+ ${rawMatches.length - 3} more occurrence${rawMatches.length - 3 !== 1 ? 's' : ''} in log</div>`
         : ''}
+      <button class="lp-show-in-log" data-filter-id="${id}">Show all ${rawMatches.length} in All Events →</button>
     </div>`;
 
   return html;

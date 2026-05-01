@@ -747,7 +747,11 @@ ul, ol { list-style: none; }
   border-radius: var(--r-sm);
   border: 1px solid var(--border);
   font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
+
+.evidence-item:hover { border-color: var(--amber-glow); background: var(--surface3); }
 
 .ev-sev-dot {
   width: 8px;
@@ -760,12 +764,8 @@ ul, ol { list-style: none; }
   font-family: var(--mono);
   font-weight: 700;
   color: var(--amber);
-  cursor: pointer;
   min-width: 32px;
-  transition: opacity 0.15s;
 }
-
-.ev-id:hover { opacity: 0.7; text-decoration: underline; }
 
 .ev-provider {
   font-family: var(--mono);
@@ -819,6 +819,7 @@ ul, ol { list-style: none; }
   padding: 5px 12px;
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
   transition: background 0.1s;
+  cursor: pointer;
 }
 
 .timeline-item:hover { background: var(--surface2); }
@@ -870,13 +871,9 @@ ul, ol { list-style: none; }
   font-family: var(--mono);
   font-weight: 700;
   color: var(--amber);
-  cursor: pointer;
   min-width: 36px;
   flex-shrink: 0;
-  transition: opacity 0.15s;
 }
-
-.tl-id:hover { opacity: 0.7; }
 
 .tl-provider {
   color: var(--text3);
@@ -1689,6 +1686,24 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
 }
 
 .lp-full-docs-btn:hover { background: var(--amber-glow); border-color: var(--amber-dim); }
+
+.lp-show-in-log {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 7px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  color: var(--text2);
+  cursor: pointer;
+  transition: all 0.12s;
+  margin-top: 12px;
+}
+
+.lp-show-in-log:hover { color: var(--amber); border-color: var(--amber-glow); background: var(--amber-pale); }
 
 /* No-doc state */
 .lp-no-doc-state {
