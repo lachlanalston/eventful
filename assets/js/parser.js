@@ -15,6 +15,21 @@
  * @property {string} message
  * @property {number} recordId
  * @property {Object} data      - key/value pairs from EventData
+ * @property {number}   processId
+ * @property {number}   threadId
+ * @property {string}   activityId
+ * @property {string}   relatedActivityId
+ * @property {string}   userSID
+ * @property {string}   task           - raw numeric string from System/Task
+ * @property {string}   opcode         - raw numeric string from System/Opcode
+ * @property {string}   keywords       - raw hex string from System/Keywords
+ * @property {string}   taskName       - human-readable from RenderingInfo/Task
+ * @property {string}   opcodeName     - human-readable from RenderingInfo/Opcode
+ * @property {string[]} keywordNames   - human-readable labels from RenderingInfo/Keywords
+ * @property {string}   providerDescription - from RenderingInfo/Provider
+ * @property {string}   version        - System/Version (event schema version)
+ * @property {string}   qualifiers     - EventID/@Qualifiers (legacy pre-Vista)
+ * @property {string[]} dataAnon       - anonymous EventData nodes (no Name attr)
  */
 
 const NS = 'http://schemas.microsoft.com/win/2004/08/events/event';
@@ -78,16 +93,27 @@ function parseEventNode(node) {
   const timeStr = timeCreated?.getAttribute('SystemTime') || timeCreated?.textContent || '';
   const timestamp = new Date(timeStr);
 
+  const execution   = sys?.querySelector('Execution');
+  const correlation = sys?.querySelector('Correlation');
+  const securityEl  = sys?.querySelector('Security');
+
   // Get severity — prefer RenderingInfo Level text (pre-rendered, more reliable)
   const renderingInfo = node.querySelector('RenderingInfo');
   const renderedLevel = renderingInfo?.querySelector('Level')?.textContent?.trim();
   const severity = levelToSeverity(levelNum, renderedLevel);
 
+  // Human-readable names from RenderingInfo (preferred over raw numeric System values)
+  const taskName    = renderingInfo?.querySelector('Task')?.textContent?.trim() || '';
+  const opcodeName  = renderingInfo?.querySelector('Opcode')?.textContent?.trim() || '';
+  const keywordNames = [...(renderingInfo?.querySelectorAll('Keywords > Keyword') ?? [])]
+    .map(k => k.textContent.trim()).filter(Boolean);
+  const providerDescription = renderingInfo?.querySelector('Provider')?.textContent?.trim() || '';
+
   // Build message
   const message = extractMessage(node, renderingInfo);
 
-  // Extract key/value data pairs
-  const data = extractEventData(node);
+  // Extract key/value data pairs (named + anonymous)
+  const { named: data, anon: dataAnon } = extractEventData(node);
 
   return {
     id,
@@ -98,8 +124,23 @@ function parseEventNode(node) {
     timestamp,
     computer,
     message,
-    recordId: isNaN(recordId) ? 0 : recordId,
+    recordId:            isNaN(recordId) ? 0 : recordId,
+    processId:           parseInt(execution?.getAttribute('ProcessID'), 10) || 0,
+    threadId:            parseInt(execution?.getAttribute('ThreadID'), 10) || 0,
+    activityId:          correlation?.getAttribute('ActivityID') || '',
+    relatedActivityId:   correlation?.getAttribute('RelatedActivityID') || '',
+    userSID:             securityEl?.getAttribute('UserID') || '',
+    task:                getText(sys, 'Task'),
+    opcode:              getText(sys, 'Opcode'),
+    keywords:            getText(sys, 'Keywords'),
+    taskName,
+    opcodeName,
+    keywordNames,
+    providerDescription,
+    version:             getText(sys, 'Version'),
+    qualifiers:          sys?.querySelector('EventID')?.getAttribute('Qualifiers') || '',
     data,
+    dataAnon,
   };
 }
 
@@ -112,7 +153,7 @@ function getText(parent, tag) {
 function extractMessage(node, renderingInfo) {
   // Best case: Windows pre-rendered the message for us
   const rendered = renderingInfo?.querySelector('Message')?.textContent?.trim();
-  if (rendered) return rendered.substring(0, 800);
+  if (rendered) return rendered;
 
   // Fall back: build from EventData key-value pairs
   const eventData = node.querySelector('EventData');
@@ -125,27 +166,29 @@ function extractMessage(node, renderingInfo) {
         parts.push(name ? `${name}: ${val}` : val);
       }
     }
-    if (parts.length) return parts.join(' | ').substring(0, 800);
+    if (parts.length) return parts.join(' | ');
   }
 
   // Last resort: UserData
   const userData = node.querySelector('UserData');
-  if (userData) return userData.textContent.trim().substring(0, 800);
+  if (userData) return userData.textContent.trim();
 
   return '';
 }
 
-/** Extract EventData fields as an object */
+/** Extract EventData fields — named as object, anonymous as array */
 function extractEventData(node) {
-  const data = {};
+  const named = {};
+  const anon  = [];
   const eventData = node.querySelector('EventData');
-  if (!eventData) return data;
+  if (!eventData) return { named, anon };
   for (const el of eventData.querySelectorAll('Data')) {
     const name = el.getAttribute('Name');
-    const val = el.textContent.trim();
-    if (name && val) data[name] = val;
+    const val  = el.textContent.trim();
+    if (name) { if (val) named[name] = val; }
+    else       { if (val) anon.push(val); }
   }
-  return data;
+  return { named, anon };
 }
 
 /** Map numeric Level + optional text to severity string */

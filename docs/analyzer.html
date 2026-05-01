@@ -7,9 +7,10 @@
   <meta name="description" content="Upload Windows Event Viewer XML logs for instant root cause analysis. Identifies crash patterns, correlates events, and suggests next steps." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/analyzer-DAC5opBU.js"></script>
+  <script type="module" crossorigin src="./assets/analyzer-CrY7aaGf.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/theme-CCBoUXgy.js">
-  <link rel="stylesheet" crossorigin href="./assets/analyzer-BENzoWoa.css">
+  <link rel="modulepreload" crossorigin href="./assets/index-BAM9NZ7H.js">
+  <link rel="stylesheet" crossorigin href="./assets/analyzer-B4_UUL0i.css">
 </head>
 <body>
 
@@ -90,6 +91,18 @@
       <div id="event-table-wrap"></div>
     </div>
 
+  </div>
+
+  <!-- ── Lookup Panel ───────────────────────────────────────────────────────── -->
+  <div id="lookup-panel" hidden>
+    <div class="lp-backdrop" id="lp-backdrop"></div>
+    <aside class="lp-drawer">
+      <div class="lp-header">
+        <span class="lp-header-title">Event Lookup</span>
+        <button class="lp-close" id="lp-close" title="Close (Esc)">✕</button>
+      </div>
+      <div id="lp-body" class="lp-body"></div>
+    </aside>
   </div>
 
 </body>

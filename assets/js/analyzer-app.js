@@ -6,6 +6,7 @@
 import { parseEventXML, clusterEvents } from './parser.js';
 import { analyzeEvents } from './correlator.js';
 import { initTheme, toggleTheme } from './theme.js';
+import { allEvents } from '../../data/events/index.js';
 
 initTheme();
 document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', toggleTheme));
@@ -46,6 +47,11 @@ $dropZone?.addEventListener('drop', e => {
 });
 
 $newAnalysisBtn?.addEventListener('click', resetToUpload);
+
+// ── Lookup Panel wiring (always-on) ──────────────────────────────────────────
+document.getElementById('lp-backdrop')?.addEventListener('click', closeLookupPanel);
+document.getElementById('lp-close')?.addEventListener('click', closeLookupPanel);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLookupPanel(); });
 
 // ── Process File ──────────────────────────────────────────────────────────────
 async function processFile(file) {
@@ -196,10 +202,7 @@ function renderIncidents(incidents) {
 
   // Wire up event ID lookup links
   $incidentsSection.querySelectorAll('[data-lookup-id]').forEach(el => {
-    el.addEventListener('click', () => {
-      const id = el.dataset.lookupId;
-      window.open(`results.html?q=${id}`, '_blank');
-    });
+    el.addEventListener('click', () => openLookupPanel(el.dataset.lookupId));
   });
 }
 
@@ -552,7 +555,17 @@ function redrawTable() {
   $eventTableWrap.querySelectorAll('.table-event-id').forEach(el => {
     el.addEventListener('click', e => {
       e.stopPropagation();
-      window.open(`results.html?q=${el.dataset.lookupId}`, '_blank');
+      openLookupPanel(el.dataset.lookupId);
+    });
+  });
+
+  // Advanced toggle (event delegation — survives no redraw)
+  $eventTableWrap.querySelectorAll('.ev-advanced-toggle').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const section = btn.closest('.ev-detail-inner').querySelector('.ev-advanced-section');
+      const open = section.classList.toggle('ev-advanced-open');
+      btn.textContent = open ? 'Advanced ▲' : 'Advanced ▼';
     });
   });
 }
@@ -561,6 +574,9 @@ function buildTableRow(ev) {
   const isExpanded = tbl.expandedIds.has(ev.recordId);
   const sev = ev.severity.toLowerCase();
   const dataKeys = Object.keys(ev.data || {});
+  const msgPreview = ev.message
+    ? esc(ev.message.substring(0, 150)) + (ev.message.length > 150 ? '…' : '')
+    : '<span style="color:var(--text3);font-style:italic">no message</span>';
 
   const mainRow = `
     <tr class="ev-row-${sev}${isExpanded ? ' row-expanded' : ''}" data-record="${ev.recordId}">
@@ -570,23 +586,66 @@ function buildTableRow(ev) {
       <td><span class="table-event-id" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">${ev.id}</span></td>
       <td class="ev-col-provider" title="${esc(ev.provider)}">${esc(shortProvider(ev.provider))}</td>
       <td class="ev-col-channel">${esc(ev.channel)}</td>
-      <td class="ev-col-message">${esc(ev.message.substring(0, 150))}</td>
+      <td class="ev-col-message">${msgPreview}</td>
     </tr>`;
 
   if (!isExpanded) return mainRow;
+
+  const taskDisplay    = ev.taskName    || ev.task    || null;
+  const opcodeDisplay  = ev.opcodeName  || ev.opcode  || null;
+  const keywordsDisplay = ev.keywordNames?.length
+    ? ev.keywordNames.join(', ')
+    : (ev.keywords || null);
+
+  const metaFields = [
+    ['Time (local)',    ev.timestamp.toLocaleString()],
+    ['Time (UTC)',      ev.timestamp.toISOString()],
+    ['Provider',        ev.provider],
+    ['Channel',         ev.channel],
+    ['Computer',        ev.computer],
+    ['Record ID',       ev.recordId || null],
+    ['User SID',        ev.userSID],
+    ['Process ID',      ev.processId || null],
+    ['Thread ID',       ev.threadId || null],
+    ['Activity ID',     ev.activityId],
+    ['Related Act. ID', ev.relatedActivityId],
+    ['Task',            taskDisplay],
+    ['Opcode',          opcodeDisplay],
+    ['Keywords',        keywordsDisplay],
+  ].filter(([, v]) => v);
+
+  const advancedFields = [
+    ['Raw Level',        String(ev.levelNum)],
+    ['Raw Task',         ev.task],
+    ['Raw Opcode',       ev.opcode],
+    ['Raw Keywords',     ev.keywords],
+    ['Version',          ev.version],
+    ['Qualifiers',       ev.qualifiers],
+    ['Provider Desc.',   ev.providerDescription],
+  ].filter(([, v]) => v);
+
+  const messageHtml = ev.message
+    ? `<div class="ev-detail-message">${esc(ev.message)}</div>`
+    : `<div class="ev-detail-message ev-no-message">
+        Message not rendered — Windows message templates are stored on the source machine.
+        Export directly from the affected computer to see full event messages.
+       </div>`;
+
+  const anonKeys = ev.dataAnon || [];
 
   return mainRow + `
     <tr class="ev-detail-row">
       <td colspan="7">
         <div class="ev-detail-inner">
-          <div class="ev-detail-message">${esc(ev.message || '(no message)')}</div>
+          ${messageHtml}
           <div class="ev-detail-meta">
-            ${[['Provider', ev.provider], ['Channel', ev.channel], ['Computer', ev.computer], ['Record ID', ev.recordId || '—']]
-              .filter(([, v]) => v)
-              .map(([k, v]) => `<div class="ev-detail-field"><span class="ev-detail-key">${k}</span><span class="ev-detail-val">${esc(String(v))}</span></div>`)
-              .join('')}
+            ${metaFields.map(([k, v]) => `
+              <div class="ev-detail-field">
+                <span class="ev-detail-key">${k}</span>
+                <span class="ev-detail-val">${esc(String(v))}</span>
+              </div>`).join('')}
           </div>
-          ${dataKeys.length ? `
+          ${dataKeys.length || anonKeys.length ? `
           <div class="ev-detail-data">
             <div class="ev-detail-data-title">Event Data</div>
             ${dataKeys.map(k => `
@@ -594,23 +653,52 @@ function buildTableRow(ev) {
                 <span class="ev-detail-data-key">${esc(k)}</span>
                 <span class="ev-detail-data-val">${esc(String(ev.data[k]))}</span>
               </div>`).join('')}
+            ${anonKeys.map((v, i) => `
+              <div class="ev-detail-data-row">
+                <span class="ev-detail-data-key ev-detail-data-key--anon">[${i}]</span>
+                <span class="ev-detail-data-val">${esc(String(v))}</span>
+              </div>`).join('')}
           </div>` : ''}
           <div class="ev-detail-actions">
             <span class="ev-detail-lookup-btn table-event-id" data-lookup-id="${ev.id}">
               Look up Event ${ev.id} →
             </span>
+            ${advancedFields.length ? `<button class="ev-advanced-toggle">Advanced ▼</button>` : ''}
           </div>
+          ${advancedFields.length ? `
+          <div class="ev-advanced-section">
+            <div class="ev-detail-data-title">Advanced / Raw</div>
+            ${advancedFields.map(([k, v]) => `
+              <div class="ev-detail-field">
+                <span class="ev-detail-key">${k}</span>
+                <span class="ev-detail-val">${esc(String(v))}</span>
+              </div>`).join('')}
+          </div>` : ''}
         </div>
       </td>
     </tr>`;
 }
 
 function exportCSV(events) {
-  const cols = ['Time (UTC)', 'Severity', 'EventID', 'Provider', 'Channel', 'Computer', 'RecordID', 'Message'];
+  const cols = [
+    'Time (UTC)', 'Severity', 'EventID', 'Provider', 'Channel', 'Computer',
+    'RecordID', 'ProcessID', 'ThreadID', 'UserSID', 'ActivityID', 'RelatedActivityID',
+    'Task', 'TaskName', 'Opcode', 'OpcodeName', 'Keywords', 'KeywordNames',
+    'Version', 'Qualifiers', 'ProviderDescription',
+    'Message', 'EventData', 'EventDataAnon',
+  ];
   const q = s => `"${String(s ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
   const rows = events.map(e => [
     e.timestamp.toISOString(), e.severity, e.id,
-    q(e.provider), q(e.channel), q(e.computer), e.recordId, q(e.message),
+    q(e.provider), q(e.channel), q(e.computer),
+    e.recordId, e.processId || '', e.threadId || '',
+    q(e.userSID), q(e.activityId), q(e.relatedActivityId),
+    q(e.task), q(e.taskName), q(e.opcode), q(e.opcodeName),
+    q(e.keywords), q((e.keywordNames || []).join('; ')),
+    q(e.version), q(e.qualifiers), q(e.providerDescription),
+    q(e.message),
+    q(Object.entries(e.data || {}).map(([k, v]) => `${k}=${v}`).join('; ')),
+    q((e.dataAnon || []).join('; ')),
   ].join(','));
   const csv = [cols.join(','), ...rows].join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
@@ -619,6 +707,193 @@ function exportCSV(events) {
   });
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+// ── Lookup Panel ─────────────────────────────────────────────────────────────
+
+function openLookupPanel(eventId) {
+  const id = parseInt(eventId, 10);
+  const $panel = document.getElementById('lookup-panel');
+  const $body  = document.getElementById('lp-body');
+  if (!$panel || !$body) return;
+
+  const dbEntry    = allEvents.find(e => e.id === id);
+  const rawMatches = allParsedEvents.filter(e => e.id === id);
+
+  $body.innerHTML = buildPanelContent(id, dbEntry, rawMatches);
+  $panel.hidden = false;
+
+  // Wire PS copy buttons
+  $body.querySelectorAll('.lp-copy-ps').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.code).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+      });
+    });
+  });
+
+  // Wire Advanced toggles
+  $body.querySelectorAll('.lp-advanced-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const section = btn.nextElementSibling;
+      const open = section.classList.toggle('lp-advanced-open');
+      btn.textContent = open ? 'Advanced ▲' : 'Advanced ▼';
+    });
+  });
+}
+
+function closeLookupPanel() {
+  const $panel = document.getElementById('lookup-panel');
+  if ($panel) $panel.hidden = true;
+}
+
+function buildPanelContent(id, dbEntry, rawMatches) {
+  let html = '';
+
+  // ── Knowledge base section ──
+  if (dbEntry) {
+    const sev = dbEntry.severity?.toLowerCase() ?? 'info';
+    html += `
+      <div class="lp-section">
+        <div class="lp-section-label">Knowledge Base</div>
+        <div class="lp-doc-header">
+          <span class="lp-id-badge">${id}</span>
+          <div>
+            <div class="lp-doc-title">${esc(dbEntry.title)}</div>
+            <div class="lp-doc-meta">
+              <span class="sev-badge sev-badge-${sev}">${esc(dbEntry.severity)}</span>
+              <span class="lp-channel">${esc(dbEntry.channel || dbEntry.source || '')}</span>
+            </div>
+          </div>
+        </div>
+        <p class="lp-description">${esc(dbEntry.description || dbEntry.short_desc || '')}</p>
+        ${dbEntry.causes?.length ? `
+          <div class="lp-subsection-label">Causes</div>
+          <ul class="lp-causes">
+            ${dbEntry.causes.map(c => `<li>${esc(c)}</li>`).join('')}
+          </ul>` : ''}
+        ${dbEntry.steps?.length ? `
+          <div class="lp-subsection-label">Investigation Steps</div>
+          <ol class="lp-steps">
+            ${dbEntry.steps.map(s => `<li>${esc(s)}</li>`).join('')}
+          </ol>` : ''}
+        ${dbEntry.powershell ? `
+          <div class="lp-subsection-label">PowerShell</div>
+          <div class="lp-ps-block">
+            <pre>${esc(dbEntry.powershell)}</pre>
+            <button class="lp-copy-ps" data-code="${esc(dbEntry.powershell)}">Copy</button>
+          </div>` : ''}
+        <div class="lp-doc-footer">
+          <a href="results.html?q=${id}" target="_blank" rel="noopener" class="lp-full-docs-btn">
+            Open full docs →
+          </a>
+        </div>
+      </div>`;
+  } else {
+    html += `
+      <div class="lp-section">
+        <div class="lp-section-label">Knowledge Base</div>
+        <div class="lp-no-doc-state">
+          <div class="lp-no-doc-icon">📭</div>
+          <div class="lp-no-doc-title">No documentation for Event ${id}</div>
+          <div class="lp-no-doc-sub">This event ID is not in the Eventful knowledge base. Raw event data from your log is shown below.</div>
+        </div>
+      </div>`;
+  }
+
+  // ── Raw events from uploaded log ──
+  if (rawMatches.length === 0) {
+    html += `
+      <div class="lp-section">
+        <div class="lp-section-label">From your log</div>
+        <div class="lp-no-raw">No events with this ID in the uploaded log.</div>
+      </div>`;
+    return html;
+  }
+
+  const shown = rawMatches.slice(0, 3);
+  html += `
+    <div class="lp-section">
+      <div class="lp-section-label">
+        From your log
+        ${rawMatches.length > 1 ? `<span class="lp-raw-count">${rawMatches.length} occurrences</span>` : ''}
+      </div>
+      ${shown.map((ev, i) => {
+        const taskDisp    = ev.taskName    || ev.opcode  || null;
+        const opcodeDisp  = ev.opcodeName  || ev.opcode  || null;
+        const kwDisp      = ev.keywordNames?.length ? ev.keywordNames.join(', ') : (ev.keywords || null);
+        const anonData    = ev.dataAnon || [];
+        const advFields   = [
+          ['Raw Level',       String(ev.levelNum)],
+          ['Raw Task',        ev.task],
+          ['Raw Opcode',      ev.opcode],
+          ['Raw Keywords',    ev.keywords],
+          ['Version',         ev.version],
+          ['Qualifiers',      ev.qualifiers],
+          ['Provider Desc.',  ev.providerDescription],
+          ['Related Act. ID', ev.relatedActivityId],
+        ].filter(([, v]) => v);
+        return `
+        ${i > 0 ? '<div class="lp-raw-divider"></div>' : ''}
+        <div class="lp-raw-fields">
+          ${lpField('Time', ev.timestamp.toLocaleString())}
+          ${lpField('Severity', `<span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span>`)}
+          ${lpField('Provider', esc(shortProvider(ev.provider)))}
+          ${lpField('Channel', esc(ev.channel))}
+          ${lpField('Computer', esc(ev.computer || '—'))}
+          ${lpField('Record ID', String(ev.recordId || '—'))}
+          ${ev.processId        ? lpField('Process ID',    String(ev.processId))  : ''}
+          ${ev.threadId         ? lpField('Thread ID',     String(ev.threadId))   : ''}
+          ${ev.userSID          ? lpField('User SID',      esc(ev.userSID))        : ''}
+          ${ev.activityId       ? lpField('Activity ID',   esc(ev.activityId))    : ''}
+          ${taskDisp            ? lpField('Task',          esc(taskDisp))          : ''}
+          ${opcodeDisp          ? lpField('Opcode',        esc(opcodeDisp))        : ''}
+          ${kwDisp              ? lpField('Keywords',      esc(kwDisp))            : ''}
+        </div>
+        ${ev.message
+          ? `<div class="lp-raw-message-label">Message</div>
+             <div class="lp-raw-message">${esc(ev.message)}</div>`
+          : `<div class="lp-raw-message-label">Message</div>
+             <div class="lp-raw-message lp-no-message">Message not rendered — Windows message templates are stored on the source machine. Export directly from the affected computer to see full event messages.</div>`}
+        ${Object.keys(ev.data || {}).length || anonData.length ? `
+          <div class="lp-raw-message-label">Event Data</div>
+          <div class="lp-raw-data">
+            ${Object.entries(ev.data).map(([k, v]) => `
+              <div class="lp-raw-data-row">
+                <span class="lp-raw-data-key">${esc(k)}</span>
+                <span class="lp-raw-data-val">${esc(String(v))}</span>
+              </div>`).join('')}
+            ${anonData.map((v, idx) => `
+              <div class="lp-raw-data-row">
+                <span class="lp-raw-data-key lp-raw-data-key--anon">[${idx}]</span>
+                <span class="lp-raw-data-val">${esc(String(v))}</span>
+              </div>`).join('')}
+          </div>` : ''}
+        ${advFields.length ? `
+          <button class="lp-advanced-toggle">Advanced ▼</button>
+          <div class="lp-advanced-section">
+            <div class="lp-raw-message-label">Advanced / Raw</div>
+            <div class="lp-raw-fields">
+              ${advFields.map(([k, v]) => lpField(k, esc(v))).join('')}
+            </div>
+          </div>` : ''}
+        `;
+      }).join('')}
+      ${rawMatches.length > 3
+        ? `<div class="lp-raw-more">+ ${rawMatches.length - 3} more occurrence${rawMatches.length - 3 !== 1 ? 's' : ''} in log</div>`
+        : ''}
+    </div>`;
+
+  return html;
+}
+
+function lpField(label, value) {
+  return `
+    <div class="lp-raw-field">
+      <span class="lp-raw-key">${label}</span>
+      <span class="lp-raw-val">${value}</span>
+    </div>`;
 }
 
 // ── Error Display ─────────────────────────────────────────────────────────────
