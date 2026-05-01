@@ -113,7 +113,6 @@ function resetToUpload() {
 function renderResults(analysis, fileName) {
   const { incidents, healthScore, computerName, stats } = analysis;
 
-  // Sub-header
   if ($resultsSub) {
     const parts = [];
     if (computerName) parts.push(computerName);
@@ -126,10 +125,27 @@ function renderResults(analysis, fileName) {
   renderIncidents(incidents);
   renderEventTable(allParsedEvents);
 
+  // Update tab counts
+  const $incCount = document.getElementById('tab-inc-count');
+  const $evtCount = document.getElementById('tab-evt-count');
+  if ($incCount) $incCount.textContent = incidents.length;
+  if ($evtCount) $evtCount.textContent = stats.total.toLocaleString();
+
+  // Wire tab switching
+  document.querySelectorAll('.analyzer-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.analyzer-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const target = tab.dataset.tab;
+      document.getElementById('incidents-section').hidden = target !== 'incidents';
+      document.getElementById('events-panel').hidden = target !== 'events';
+    });
+  });
+
   showSection($resultsSection);
 }
 
-// ── Overview Grid ─────────────────────────────────────────────────────────────
+// ── Overview Bar ──────────────────────────────────────────────────────────────
 function renderOverview(score, stats) {
   if (!$overviewGrid) return;
 
@@ -137,30 +153,21 @@ function renderOverview(score, stats) {
   const scoreLabel = score >= 80 ? 'Good' : score >= 60 ? 'Degraded' : 'Critical';
 
   $overviewGrid.innerHTML = `
-    <div class="overview-score-card">
-      <div class="score-ring" style="--score-color: ${scoreColor}">
-        <span class="score-num">${score}</span>
-        <span class="score-denom">/100</span>
+    <div class="overview-bar">
+      <div class="overview-health">
+        <span class="ob-score" style="color:${scoreColor}">${score}</span>
+        <span class="ob-denom">/100</span>
+        <span class="ob-label">System Health</span>
+        <span class="ob-status" style="color:${scoreColor}">${scoreLabel}</span>
       </div>
-      <div class="score-label">System Health</div>
-      <div class="score-status" style="color: ${scoreColor}">${scoreLabel}</div>
-    </div>
-
-    <div class="overview-stats">
-      ${statCard('Critical', stats.Critical, 'stat-critical')}
-      ${statCard('Error', stats.Error, 'stat-error')}
-      ${statCard('Warning', stats.Warning, 'stat-warning')}
-      ${statCard('Info', stats.Info, 'stat-info')}
-      ${statCard('Total Events', stats.total, 'stat-total')}
-    </div>
-  `;
-}
-
-function statCard(label, count, cls) {
-  return `
-    <div class="stat-card ${cls}">
-      <span class="stat-count">${count.toLocaleString()}</span>
-      <span class="stat-label">${label}</span>
+      <div class="ob-divider"></div>
+      <div class="ob-stats">
+        <div class="ob-stat stat-critical"><span class="ob-stat-num">${stats.Critical.toLocaleString()}</span><span class="ob-stat-label">Critical</span></div>
+        <div class="ob-stat stat-error">   <span class="ob-stat-num">${stats.Error.toLocaleString()}</span>   <span class="ob-stat-label">Error</span></div>
+        <div class="ob-stat stat-warning"> <span class="ob-stat-num">${stats.Warning.toLocaleString()}</span> <span class="ob-stat-label">Warning</span></div>
+        <div class="ob-stat stat-info">    <span class="ob-stat-num">${stats.Info.toLocaleString()}</span>    <span class="ob-stat-label">Info</span></div>
+        <div class="ob-stat stat-total">   <span class="ob-stat-num">${stats.total.toLocaleString()}</span>   <span class="ob-stat-label">Total</span></div>
+      </div>
     </div>
   `;
 }
@@ -180,10 +187,7 @@ function renderIncidents(incidents) {
     return;
   }
 
-  $incidentsSection.innerHTML = `
-    <h2 class="section-heading">Detected Incidents</h2>
-    ${incidents.map((inc, i) => renderIncidentCard(inc, i)).join('')}
-  `;
+  $incidentsSection.innerHTML = incidents.map((inc, i) => renderIncidentCard(inc, i)).join('');
 
   // Wire up copy buttons
   $incidentsSection.querySelectorAll('.copy-summary-btn').forEach(btn => {

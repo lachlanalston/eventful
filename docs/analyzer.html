@@ -7,10 +7,10 @@
   <meta name="description" content="Upload Windows Event Viewer XML logs for instant root cause analysis. Identifies crash patterns, correlates events, and suggests next steps." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/analyzer-CoXx_ZD8.js"></script>
+  <script type="module" crossorigin src="./assets/analyzer-CyYZ_gav.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/theme-CCBoUXgy.js">
   <link rel="modulepreload" crossorigin href="./assets/index-BAM9NZ7H.js">
-  <link rel="stylesheet" crossorigin href="./assets/analyzer-sdQbFmtQ.css">
+  <link rel="stylesheet" crossorigin href="./assets/analyzer-BZRDtNdq.css">
 </head>
 <body>
 
@@ -78,15 +78,24 @@
       </div>
     </div>
 
-    <!-- Health score + stats -->
+    <!-- Compact overview bar -->
     <div id="overview-grid"></div>
 
-    <!-- Incidents -->
-    <div id="incidents-section"></div>
+    <!-- Tab nav -->
+    <div class="analyzer-tabs">
+      <button class="analyzer-tab active" data-tab="incidents">
+        Incidents <span id="tab-inc-count" class="tab-count"></span>
+      </button>
+      <button class="analyzer-tab" data-tab="events">
+        All Events <span id="tab-evt-count" class="tab-count"></span>
+      </button>
+    </div>
 
-    <!-- All events table — filters and table injected by JS -->
-    <div class="event-log-section">
-      <h2 class="section-heading">All Events</h2>
+    <!-- Incidents tab panel -->
+    <div id="incidents-section" class="tab-panel"></div>
+
+    <!-- All events tab panel -->
+    <div id="events-panel" class="tab-panel" hidden>
       <div id="event-log-filters-wrap"></div>
       <div id="event-table-wrap"></div>
     </div>
