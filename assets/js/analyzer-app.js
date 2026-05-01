@@ -803,12 +803,11 @@ function closeLookupPanel() {
 }
 
 function buildPanelContent(id, dbEntry, rawMatches) {
-  let html = '';
-
-  // ── Knowledge base section ──
+  // ── Left column: Knowledge Base ──
+  let kbHtml;
   if (dbEntry) {
     const sev = dbEntry.severity?.toLowerCase() ?? 'info';
-    html += `
+    kbHtml = `
       <div class="lp-section">
         <div class="lp-section-label">Knowledge Base</div>
         <div class="lp-doc-header">
@@ -845,102 +844,101 @@ function buildPanelContent(id, dbEntry, rawMatches) {
         </div>
       </div>`;
   } else {
-    html += `
+    kbHtml = `
       <div class="lp-section">
         <div class="lp-section-label">Knowledge Base</div>
         <div class="lp-no-doc-state">
-          <div class="lp-no-doc-icon">📭</div>
           <div class="lp-no-doc-title">No documentation for Event ${id}</div>
-          <div class="lp-no-doc-sub">This event ID is not in the Eventful knowledge base. Raw event data from your log is shown below.</div>
+          <div class="lp-no-doc-sub">This event ID is not in the Eventful knowledge base.</div>
         </div>
       </div>`;
   }
 
-  // ── Raw events from uploaded log ──
+  // ── Right column: Raw events from uploaded log ──
+  let rawHtml;
   if (rawMatches.length === 0) {
-    html += `
+    rawHtml = `
       <div class="lp-section">
         <div class="lp-section-label">From your log</div>
         <div class="lp-no-raw">No events with this ID in the uploaded log.</div>
       </div>`;
-    return html;
+  } else {
+    const shown = rawMatches.slice(0, 3);
+    rawHtml = `
+      <div class="lp-section">
+        <div class="lp-section-label">
+          From your log
+          ${rawMatches.length > 1 ? `<span class="lp-raw-count">${rawMatches.length} occurrences</span>` : ''}
+        </div>
+        ${shown.map((ev, i) => {
+          const taskDisp   = ev.taskName   || ev.opcode || null;
+          const opcodeDisp = ev.opcodeName || ev.opcode || null;
+          const kwDisp     = ev.keywordNames?.length ? ev.keywordNames.join(', ') : (ev.keywords || null);
+          const anonData   = ev.dataAnon || [];
+          const advFields  = [
+            ['Raw Level',       String(ev.levelNum)],
+            ['Raw Task',        ev.task],
+            ['Raw Opcode',      ev.opcode],
+            ['Raw Keywords',    ev.keywords],
+            ['Version',         ev.version],
+            ['Qualifiers',      ev.qualifiers],
+            ['Provider Desc.',  ev.providerDescription],
+            ['Related Act. ID', ev.relatedActivityId],
+          ].filter(([, v]) => v);
+          return `
+          ${i > 0 ? '<div class="lp-raw-divider"></div>' : ''}
+          <div class="lp-raw-fields">
+            ${lpField('Time', ev.timestamp.toLocaleString())}
+            ${lpField('Severity', `<span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span>`)}
+            ${lpField('Provider', esc(shortProvider(ev.provider)))}
+            ${lpField('Channel', esc(ev.channel))}
+            ${lpField('Computer', esc(ev.computer || '—'))}
+            ${lpField('Record ID', String(ev.recordId || '—'))}
+            ${ev.processId  ? lpField('Process ID',  String(ev.processId))  : ''}
+            ${ev.threadId   ? lpField('Thread ID',   String(ev.threadId))   : ''}
+            ${ev.userSID    ? lpField('User SID',    esc(ev.userSID))       : ''}
+            ${ev.activityId ? lpField('Activity ID', esc(ev.activityId))   : ''}
+            ${taskDisp      ? lpField('Task',        esc(taskDisp))         : ''}
+            ${opcodeDisp    ? lpField('Opcode',      esc(opcodeDisp))       : ''}
+            ${kwDisp        ? lpField('Keywords',    esc(kwDisp))           : ''}
+          </div>
+          ${ev.message
+            ? `<div class="lp-raw-message-label">Message</div>
+               <div class="lp-raw-message">${esc(ev.message)}</div>`
+            : `<div class="lp-raw-message-label">Message</div>
+               <div class="lp-raw-message lp-no-message">Message not rendered — Windows message templates are stored on the source machine. Export directly from the affected computer to see full event messages.</div>`}
+          ${Object.keys(ev.data || {}).length || anonData.length ? `
+            <div class="lp-raw-message-label">Event Data</div>
+            <div class="lp-raw-data">
+              ${Object.entries(ev.data).map(([k, v]) => `
+                <div class="lp-raw-data-row">
+                  <span class="lp-raw-data-key">${esc(k)}</span>
+                  <span class="lp-raw-data-val">${esc(String(v))}</span>
+                </div>`).join('')}
+              ${anonData.map((v, idx) => `
+                <div class="lp-raw-data-row">
+                  <span class="lp-raw-data-key lp-raw-data-key--anon">[${idx}]</span>
+                  <span class="lp-raw-data-val">${esc(String(v))}</span>
+                </div>`).join('')}
+            </div>` : ''}
+          ${advFields.length ? `
+            <button class="lp-advanced-toggle">Advanced ▼</button>
+            <div class="lp-advanced-section">
+              <div class="lp-raw-message-label">Advanced / Raw</div>
+              <div class="lp-raw-fields">
+                ${advFields.map(([k, v]) => lpField(k, esc(v))).join('')}
+              </div>
+            </div>` : ''}
+          `;
+        }).join('')}
+        ${rawMatches.length > 3
+          ? `<div class="lp-raw-more">+ ${rawMatches.length - 3} more occurrence${rawMatches.length - 3 !== 1 ? 's' : ''} in log</div>`
+          : ''}
+        <button class="lp-show-in-log" data-filter-id="${id}">Show all ${rawMatches.length} in All Events →</button>
+      </div>`;
   }
 
-  const shown = rawMatches.slice(0, 3);
-  html += `
-    <div class="lp-section">
-      <div class="lp-section-label">
-        From your log
-        ${rawMatches.length > 1 ? `<span class="lp-raw-count">${rawMatches.length} occurrences</span>` : ''}
-      </div>
-      ${shown.map((ev, i) => {
-        const taskDisp    = ev.taskName    || ev.opcode  || null;
-        const opcodeDisp  = ev.opcodeName  || ev.opcode  || null;
-        const kwDisp      = ev.keywordNames?.length ? ev.keywordNames.join(', ') : (ev.keywords || null);
-        const anonData    = ev.dataAnon || [];
-        const advFields   = [
-          ['Raw Level',       String(ev.levelNum)],
-          ['Raw Task',        ev.task],
-          ['Raw Opcode',      ev.opcode],
-          ['Raw Keywords',    ev.keywords],
-          ['Version',         ev.version],
-          ['Qualifiers',      ev.qualifiers],
-          ['Provider Desc.',  ev.providerDescription],
-          ['Related Act. ID', ev.relatedActivityId],
-        ].filter(([, v]) => v);
-        return `
-        ${i > 0 ? '<div class="lp-raw-divider"></div>' : ''}
-        <div class="lp-raw-fields">
-          ${lpField('Time', ev.timestamp.toLocaleString())}
-          ${lpField('Severity', `<span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span>`)}
-          ${lpField('Provider', esc(shortProvider(ev.provider)))}
-          ${lpField('Channel', esc(ev.channel))}
-          ${lpField('Computer', esc(ev.computer || '—'))}
-          ${lpField('Record ID', String(ev.recordId || '—'))}
-          ${ev.processId        ? lpField('Process ID',    String(ev.processId))  : ''}
-          ${ev.threadId         ? lpField('Thread ID',     String(ev.threadId))   : ''}
-          ${ev.userSID          ? lpField('User SID',      esc(ev.userSID))        : ''}
-          ${ev.activityId       ? lpField('Activity ID',   esc(ev.activityId))    : ''}
-          ${taskDisp            ? lpField('Task',          esc(taskDisp))          : ''}
-          ${opcodeDisp          ? lpField('Opcode',        esc(opcodeDisp))        : ''}
-          ${kwDisp              ? lpField('Keywords',      esc(kwDisp))            : ''}
-        </div>
-        ${ev.message
-          ? `<div class="lp-raw-message-label">Message</div>
-             <div class="lp-raw-message">${esc(ev.message)}</div>`
-          : `<div class="lp-raw-message-label">Message</div>
-             <div class="lp-raw-message lp-no-message">Message not rendered — Windows message templates are stored on the source machine. Export directly from the affected computer to see full event messages.</div>`}
-        ${Object.keys(ev.data || {}).length || anonData.length ? `
-          <div class="lp-raw-message-label">Event Data</div>
-          <div class="lp-raw-data">
-            ${Object.entries(ev.data).map(([k, v]) => `
-              <div class="lp-raw-data-row">
-                <span class="lp-raw-data-key">${esc(k)}</span>
-                <span class="lp-raw-data-val">${esc(String(v))}</span>
-              </div>`).join('')}
-            ${anonData.map((v, idx) => `
-              <div class="lp-raw-data-row">
-                <span class="lp-raw-data-key lp-raw-data-key--anon">[${idx}]</span>
-                <span class="lp-raw-data-val">${esc(String(v))}</span>
-              </div>`).join('')}
-          </div>` : ''}
-        ${advFields.length ? `
-          <button class="lp-advanced-toggle">Advanced ▼</button>
-          <div class="lp-advanced-section">
-            <div class="lp-raw-message-label">Advanced / Raw</div>
-            <div class="lp-raw-fields">
-              ${advFields.map(([k, v]) => lpField(k, esc(v))).join('')}
-            </div>
-          </div>` : ''}
-        `;
-      }).join('')}
-      ${rawMatches.length > 3
-        ? `<div class="lp-raw-more">+ ${rawMatches.length - 3} more occurrence${rawMatches.length - 3 !== 1 ? 's' : ''} in log</div>`
-        : ''}
-      <button class="lp-show-in-log" data-filter-id="${id}">Show all ${rawMatches.length} in All Events →</button>
-    </div>`;
-
-  return html;
+  return `<div class="lp-col lp-col-kb">${kbHtml}</div><div class="lp-col lp-col-raw">${rawHtml}</div>`;
 }
 
 function lpField(label, value) {

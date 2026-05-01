@@ -1442,7 +1442,7 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
   position: absolute;
   top: 0;
   right: 0;
-  width: 480px;
+  width: 840px;
   max-width: 100vw;
   height: 100%;
   background: var(--surface);
@@ -1489,13 +1489,23 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
 
 .lp-body {
   flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.lp-col {
+  flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border2) transparent;
 }
 
-.lp-body::-webkit-scrollbar { width: 4px; }
-.lp-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+.lp-col::-webkit-scrollbar { width: 4px; }
+.lp-col::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.lp-col-raw {
+  border-left: 1px solid var(--border2);
+}
 
 /* Panel sections */
 .lp-section {
@@ -1855,8 +1865,14 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
   padding: 8px 0;
 }
 
-@media (max-width: 540px) {
+@media (max-width: 860px) {
   .lp-drawer { width: 100vw; border-left: none; }
+  .lp-body { flex-direction: column; overflow-y: auto; overflow-x: hidden; }
+  .lp-col { flex: none; overflow-y: visible; }
+  .lp-col-raw { border-left: none; border-top: 1px solid var(--border2); }
+}
+
+@media (max-width: 540px) {
   .lp-raw-fields { grid-template-columns: 1fr; }
 }
 
