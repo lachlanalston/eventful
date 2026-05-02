@@ -1577,5 +1577,422 @@ Get-WinEvent -FilterHashtable @{
 } | Sort-Object Time -Descending | Format-Table -AutoSize`,
     related_ids: [238, 37, 41],
     ms_docs: null
+  },
+
+  {
+    id: 51,
+    source: 'disk',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Disk I/O Error During Paging Operation',
+    short_desc: 'Windows detected an error reading or writing to the disk during a paging (virtual memory) operation.',
+    description: 'Event ID 51 from the disk driver is generated when a read or write error occurs on the disk during a paging operation — meaning Windows was trying to swap data between RAM and the page file (or read a mapped file) and the disk returned an error. This is a significant warning. A single Event 51 can be a transient glitch; repeated Event 51 entries almost always indicate a failing disk, a loose SATA/NVMe cable, or a failing disk controller. The machine may still appear to function normally while accumulating these errors, then fail suddenly. Event 51 is one of the most common events found in logs from computers that are "randomly slow" or "randomly freeze."',
+    why_it_happens: 'Paging operations are constant on a busy system — Windows uses virtual memory to extend RAM by writing data to disk. When the disk returns an error on one of these operations, Event 51 is written. The OS retries the operation, so the user often sees only a brief freeze or slowdown. The underlying cause is almost always hardware: bad disk sectors, a failing drive, a loose cable, an overheating disk, or a failing disk controller.',
+    what_good_looks_like: 'Absence is normal. Even a single Event 51 warrants checking disk SMART data. Multiple Event 51 entries in a short window means the disk is likely failing and data is at risk.',
+    common_mistakes: [
+      'Dismissing Event 51 as a one-off without checking SMART data',
+      'Not checking the physical cable — a loose SATA cable is a very common cause and a 10-second fix',
+      'Waiting for the disk to fail completely before acting — backups should start now',
+      'Forgetting that Event 51 causes user-visible symptoms: freezing, slowness, application crashes'
+    ],
+    causes: [
+      'Failing hard disk (bad sectors, mechanical failure)',
+      'Loose or failing SATA/NVMe data cable',
+      'Failing disk controller or motherboard storage port',
+      'Overheating disk (check drive temperature)',
+      'Failing SSD (NAND wear, controller issues)',
+      'External USB drive with a poor connection'
+    ],
+    steps: [
+      'Count Event 51 occurrences — frequency and pattern matter',
+      'Identify which disk: check the device path in the event (e.g., \\Device\\Harddisk0)',
+      'Check disk SMART data immediately: Get-PhysicalDisk | Get-StorageReliabilityCounter | Select-Object DeviceId, ReadErrorsTotal, WriteErrorsTotal, Wear',
+      'Use CrystalDiskInfo or manufacturer tool for full SMART attribute read',
+      'Physically check cables — reseat SATA data cable at both ends (drive and motherboard)',
+      'Check Event 7 (disk) and Event 11 (disk) nearby — hardware malfunction markers',
+      'Check Event 129 (StorPort) — disk reset events alongside 51 = imminent failure',
+      'Backup immediately if SMART shows reallocated sectors or pending sectors > 0'
+    ],
+    symptoms: [
+      'computer randomly freezes',
+      'computer randomly slow',
+      'random hangs',
+      'blue screen of death',
+      'disk error',
+      'hard drive failing',
+      'applications crashing randomly',
+      'file system corruption',
+      'computer lags then recovers',
+      'disk making clicking noise'
+    ],
+    tags: ['disk', 'storage', 'hardware', 'paging', 'failure', 'critical', 'sata', 'nvme'],
+    powershell: `# Disk I/O Error Investigation
+# Eventful
+
+# Count recent disk errors
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'disk'
+    Id           = @(51, 7, 11)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Group-Object Id |
+    Select-Object Name, Count |
+    Format-Table -AutoSize
+
+# SMART reliability data
+Get-PhysicalDisk | ForEach-Object {
+    $rel = $_ | Get-StorageReliabilityCounter
+    [PSCustomObject]@{
+        Disk              = $_.FriendlyName
+        MediaType         = $_.MediaType
+        HealthStatus      = $_.HealthStatus
+        ReadErrors        = $rel.ReadErrorsTotal
+        WriteErrors       = $rel.WriteErrorsTotal
+        Wear              = "$($rel.Wear)%"
+        Temperature       = "$($rel.Temperature) C"
+        PowerOnHours      = $rel.PowerOnHours
+    }
+} | Format-Table -AutoSize`,
+    related_ids: [129, 153, 7, 11, 55, 41],
+    ms_docs: null
+  },
+
+  {
+    id: 129,
+    source: 'storahci',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'StorPort: Reset to Device Initiated',
+    short_desc: 'The storage controller timed out waiting for a disk response and issued a hardware reset.',
+    description: 'Event ID 129 from storahci (or StorPort) means the storage controller sent a command to the disk and the disk did not respond within the timeout window, forcing the controller to reset the device to recover. This is a serious hardware warning. Unlike Event 51 which happens during paging I/O, Event 129 indicates the disk stopped responding entirely — even briefly. The user typically experiences a multi-second freeze followed by recovery, a BSOD, or a "delayed write failed" error. On an SSD this almost always means the drive is failing or has a firmware bug. On a spinning disk it usually means imminent mechanical failure.',
+    why_it_happens: 'The AHCI/NVMe controller expects the disk to respond to commands within a set timeout (usually 30 seconds for AHCI). If the disk stalls — due to bad sectors forcing repeated read retries, a mechanical head stall, thermal shutdown, or firmware hang — the controller times out and issues a bus reset. The OS recovers the I/O but logs the reset. On healthy hardware this never happens.',
+    what_good_looks_like: 'Absence is normal. Any occurrence of Event 129 is abnormal and requires investigation. A single Event 129 on a spinning disk after years of service may be a one-off; any recurrence means replace the disk.',
+    common_mistakes: [
+      'Treating Event 129 as low priority — it is not, the drive is telling you it is struggling',
+      'Not checking whether the machine uses AHCI vs NVMe — source will be storahci or stornvme respectively',
+      'Replacing the cable but not checking SMART — the drive itself may be the problem',
+      'Missing that Event 129 during a backup job means the backup may be corrupt'
+    ],
+    causes: [
+      'Failing hard disk (mechanical failure, bad sectors exhausting retry budget)',
+      'Failing or poorly firmware-updated SSD',
+      'Overheating drive entering thermal protection',
+      'Failing SATA/NVMe cable or connector',
+      'Failing disk controller or motherboard storage chip',
+      'Firmware bug in the drive (check manufacturer for firmware update)'
+    ],
+    steps: [
+      'Check the device path in the event to identify which disk',
+      'Run SMART immediately — Event 129 is a high-priority disk failure indicator',
+      'Check Event 51 nearby — combination of 51 + 129 = near-certain disk failure',
+      'Check drive temperature: Get-PhysicalDisk | Get-StorageReliabilityCounter | Select Temperature',
+      'Check for pending/reallocated sectors in SMART (any non-zero = replace soon)',
+      'Update disk firmware from manufacturer — some 129 events are firmware bugs',
+      'Back up immediately and plan disk replacement'
+    ],
+    symptoms: [
+      'computer freezes for several seconds',
+      'system hangs then recovers',
+      'blue screen inaccessible boot device',
+      'delayed write failed error',
+      'drive not responding',
+      'ssd freezing',
+      'hard drive hang',
+      'disk reset',
+      'storage controller error'
+    ],
+    tags: ['disk', 'storage', 'hardware', 'reset', 'storahci', 'nvme', 'failure', 'critical'],
+    powershell: `# StorPort Reset Investigation
+# Eventful
+
+# Check for disk reset events
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'System'
+    Id        = @(129, 51, 153)
+    StartTime = (Get-Date).AddDays(-14)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, ProviderName, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# SMART health check
+Get-PhysicalDisk | ForEach-Object {
+    $rel = $_ | Get-StorageReliabilityCounter
+    [PSCustomObject]@{
+        Disk          = $_.FriendlyName
+        Health        = $_.HealthStatus
+        Temperature   = "$($rel.Temperature) C"
+        ReadErrors    = $rel.ReadErrorsTotal
+        WriteErrors   = $rel.WriteErrorsTotal
+        Wear          = "$($rel.Wear)%"
+    }
+} | Format-Table -AutoSize`,
+    related_ids: [51, 153, 7, 11, 55, 41],
+    ms_docs: null
+  },
+
+  {
+    id: 153,
+    source: 'disk',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Disk Retriable I/O Error',
+    short_desc: 'A disk I/O operation failed but was retried successfully — an early warning of disk problems.',
+    description: 'Event ID 153 from the disk driver indicates a disk I/O operation failed on the first attempt but succeeded on retry. The OS handles this transparently so the user typically notices nothing — this is what makes Event 153 particularly dangerous. It is an early warning sign that appears weeks or months before a disk starts producing Event 51 (paging errors) and Event 129 (disk resets). Seeing Event 153 in a log is the best opportunity to catch a failing disk before it causes data loss or a system crash. Treat it as a yellow flag: investigate, check SMART, increase backup frequency.',
+    why_it_happens: 'Magnetic hard disks can fail to read a sector on first pass due to a weak magnetic signal, a vibration, or early-stage surface degradation. The drive retries internally (up to several times) and then the OS driver also retries. If a later retry succeeds, Event 153 is written rather than Event 51. SSDs can produce 153 during early NAND cell degradation. The key insight: a disk that needs retries to succeed is a disk that is getting worse.',
+    what_good_looks_like: 'Absence is normal for a healthy drive. Even one or two Event 153 entries justifies checking SMART. A cluster of 153 entries or 153 appearing alongside 51 or 129 means the disk is in an active failure mode.',
+    causes: [
+      'Early-stage disk surface degradation (HDD)',
+      'Weak magnetic sectors starting to fail (HDD)',
+      'SSD NAND cell wear approaching end of life',
+      'Vibration or physical shock causing temporary read failure',
+      'Marginal power delivery to the disk',
+      'Loose data or power cable causing intermittent contact'
+    ],
+    steps: [
+      'Note how many Event 153 entries appear and over what time period',
+      'Check SMART data: reallocated sectors, pending sectors, uncorrectable sectors',
+      'Compare 153 frequency over time — increasing rate = accelerating failure',
+      'Check Event 51 and 129 — if those appear alongside 153, disk failure is active not just early',
+      'Increase backup frequency immediately',
+      'Plan disk replacement even if SMART looks clean — 153 can precede SMART-reported failures'
+    ],
+    symptoms: [
+      'disk errors in event log',
+      'hard drive warnings',
+      'early disk failure',
+      'smart warning',
+      'drive health warning',
+      'occasional disk errors',
+      'disk slowly failing'
+    ],
+    tags: ['disk', 'storage', 'hardware', 'warning', 'early-warning', 'smart', 'failure'],
+    powershell: `# Disk Health - Early Warning Check
+# Eventful
+
+# Disk error event frequency (last 30 days)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'disk'
+    Id           = @(153, 51, 7, 11)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Group-Object Id |
+    Select-Object @{N='EventId'; E={$_.Name}},
+                  @{N='Count';   E={$_.Count}} |
+    Format-Table -AutoSize
+
+# SMART data
+Get-PhysicalDisk | ForEach-Object {
+    $rel = $_ | Get-StorageReliabilityCounter
+    [PSCustomObject]@{
+        Disk              = $_.FriendlyName
+        Health            = $_.HealthStatus
+        ReadErrors        = $rel.ReadErrorsTotal
+        WriteErrors       = $rel.WriteErrorsTotal
+        Wear              = "$($rel.Wear)%"
+        PowerOnHours      = $rel.PowerOnHours
+    }
+} | Format-Table -AutoSize`,
+    related_ids: [51, 129, 7, 11],
+    ms_docs: null
+  },
+
+  {
+    id: 37,
+    source: 'Microsoft-Windows-Kernel-Processor-Power',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'CPU Speed Limited by Firmware',
+    short_desc: 'The processor is running slower than its rated speed due to a firmware-imposed limit — most commonly overheating.',
+    description: 'Event ID 37 from Kernel-Processor-Power is the single most important event for diagnosing "my computer got suddenly slow" tickets. It means the CPU firmware (BIOS/UEFI) has capped the processor speed below its rated maximum. The event records the processor number, the current performance percentage (100% = full speed, lower values = throttled), and optionally the reason. The most common cause by far is overheating — when a CPU hits its thermal limit, the firmware reduces its clock speed to protect it, causing an immediate and dramatic performance drop that the user experiences as the computer becoming unusably slow.',
+    why_it_happens: 'Modern CPUs have built-in thermal protection: when die temperature hits the TjMax threshold (typically 90–105°C depending on CPU model), the firmware reduces the clock multiplier to cut heat output. This "thermal throttling" keeps the CPU alive but makes it run at a fraction of its rated speed. Other causes: the active power plan is set to Power Saver or Balanced (which caps CPU performance), a laptop is running on battery, BIOS power settings are misconfigured, or a virtualisation host is constraining the guest.',
+    what_good_looks_like: 'Absence is normal on a healthy desktop. On laptops under power plans, occasional 37 entries with modest throttling are normal. Investigate: Event 37 showing performance at 30% or lower, Event 37 appearing repeatedly during normal workloads, or a sudden onset of Event 37 after months of none (thermal paste dried out, heatsink clogged with dust).',
+    common_mistakes: [
+      'Not checking the CPU temperature — the event alone does not tell you the temperature',
+      'Fixing the power plan without checking if overheating is the actual cause — if it is, changing the power plan just masks the problem',
+      'Forgetting laptops throttle on battery — always test on mains power before diagnosing hardware',
+      'Not checking whether the heatsink fan is spinning — a failed fan causes immediate sustained throttling'
+    ],
+    causes: [
+      'CPU overheating — dried thermal paste, dust-blocked heatsink, failed fan',
+      'Power plan set to Balanced or Power Saver',
+      'Laptop running on battery (power-saving throttle)',
+      'BIOS power management settings restricting TDP',
+      'Virtualisation host CPU resource limit',
+      'High ambient temperature in the room or enclosure'
+    ],
+    steps: [
+      'Check the performance percentage in the event — below 50% sustained is a serious problem',
+      'Check CPU temperature with HWMonitor, Core Temp, or PowerShell (ACPI thermal zones)',
+      'If temp > 85°C under light load: clean heatsink fins and replace thermal paste',
+      'Check the active power plan: powercfg /getactivescheme — switch to High Performance for testing',
+      'Check fan operation: physically listen and use BIOS fan monitor',
+      'On a laptop: test on mains power — if throttling stops, it was a battery power policy',
+      'Check BIOS for power/performance settings — some have a Power Limit that is set too low'
+    ],
+    symptoms: [
+      'computer suddenly slow',
+      'computer became slow overnight',
+      'cpu running slow',
+      'processor throttled',
+      'computer sluggish',
+      'everything is slow',
+      'computer slow after a while',
+      'laptop slow on battery',
+      'performance dropped',
+      'computer slow when hot'
+    ],
+    tags: ['cpu', 'performance', 'throttling', 'thermal', 'overheating', 'slowness', 'power'],
+    powershell: `# CPU Throttling Investigation
+# Eventful
+
+# Check for throttling events
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-Processor-Power'
+    Id           = 37
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        Time        = $_.TimeCreated
+        Processor   = ($data | Where-Object Name -eq 'ProcessorNumber').'#text'
+        PerfPercent = ($data | Where-Object Name -eq 'TargetProcessorThrottle').'#text'
+    }
+} | Sort-Object Time -Descending | Format-Table -AutoSize
+
+# Current power plan
+powercfg /getactivescheme
+
+# CPU temperature via ACPI (not all hardware exposes this)
+Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi -ErrorAction SilentlyContinue |
+    Select-Object InstanceName,
+        @{N='TempC'; E={ [math]::Round(($_.CurrentTemperature - 2732) / 10, 1) }} |
+    Format-Table -AutoSize`,
+    related_ids: [238, 247, 41],
+    ms_docs: 'https://learn.microsoft.com/en-us/troubleshoot/windows-client/performance/cpu-frequency-limited-firmware'
+  },
+
+  {
+    id: 7026,
+    source: 'Service Control Manager',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Boot-Start or System-Start Driver Failed to Load',
+    short_desc: 'A driver that is supposed to load at boot failed — can cause BSODs, missing hardware, or system instability.',
+    description: 'Event ID 7026 from the Service Control Manager is written when a driver configured to load at boot time (boot-start or system-start type) fails to initialise. These are some of the earliest drivers loaded — storage controllers, file system drivers, hardware abstraction drivers. A failed boot-start driver can cause BSODs during or after boot, missing hardware devices, system instability, or degraded performance. The event names the driver that failed. Critical drivers (disk controller, NTFS) failing will usually result in a BSOD before Windows fully loads; less critical drivers result in Event 7026 with Windows still functional but a hardware component non-functional.',
+    why_it_happens: 'Boot-start drivers fail for several reasons: the driver binary is missing or corrupt (Windows Update gone wrong, malware damage), the hardware the driver supports is no longer present (USB device was unplugged), a driver update introduced a bug, or the driver is incompatible with the current OS version. After a Windows upgrade, old third-party drivers for hardware that was not migrated cleanly are a common source.',
+    what_good_looks_like: 'No Event 7026 in a healthy system. A single occurrence after a driver update or hardware change is worth investigating but may resolve on reboot. Repeated Event 7026 for the same driver = persistent problem requiring remediation.',
+    common_mistakes: [
+      'Ignoring 7026 because Windows boots fine — the failed driver may control a device that looks functional but is running degraded',
+      'Not checking Device Manager after seeing 7026 — the failed device will usually show a yellow warning',
+      'Reinstalling drivers before checking if the underlying hardware is present and recognised in BIOS'
+    ],
+    causes: [
+      'Driver binary missing or corrupt',
+      'Incompatible or outdated driver after Windows Update',
+      'Hardware removed but driver still registered',
+      'Third-party driver conflict',
+      'Malware corrupting driver files',
+      'Failed Windows in-place upgrade leaving stale drivers'
+    ],
+    steps: [
+      'Note the driver name from the event',
+      'Open Device Manager — look for yellow warning triangles (devmgmt.msc)',
+      'Right-click the affected device → Update Driver or Roll Back Driver',
+      'If driver is for removed hardware: uninstall the device in Device Manager',
+      'Check Windows Update — a pending driver update may fix the issue',
+      'Run: sfc /scannow to check for and repair corrupt system files',
+      'If after a Windows upgrade: use compatibility mode or download the latest driver from the manufacturer'
+    ],
+    symptoms: [
+      'driver failed to load',
+      'device not working after reboot',
+      'blue screen on boot',
+      'hardware not detected',
+      'driver error on startup',
+      'device missing after update',
+      'system instability after driver update'
+    ],
+    tags: ['driver', 'boot', 'hardware', 'service', 'bsod', 'scm', 'stability'],
+    powershell: `# Boot Driver Failure Investigation
+# Eventful
+
+# Failed boot drivers (last 30 days)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Service Control Manager'
+    Id           = 7026
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# Devices with errors in Device Manager
+Get-PnpDevice | Where-Object { $_.Status -ne 'OK' } |
+    Select-Object Status, Class, FriendlyName, InstanceId |
+    Format-Table -AutoSize`,
+    related_ids: [7000, 7001, 7034, 41, 1001],
+    ms_docs: null
+  },
+
+  {
+    id: 10016,
+    source: 'Microsoft-Windows-DistributedCOM',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Beginner',
+    title: 'DCOM Permission Error (Usually Harmless)',
+    short_desc: 'A process tried to start a DCOM server without the required permissions. Appears constantly in most Windows logs — almost always harmless noise.',
+    description: 'Event ID 10016 from DistributedCOM is one of the most common events in Windows System logs and is responsible for an enormous amount of wasted diagnostic time. It means a process attempted to activate or call a DCOM (Distributed Component Object Model) server and was denied due to missing launch or activation permissions. Despite appearing as a Warning and sometimes an Error, this event is almost never the cause of user-reported problems. Microsoft itself ships Windows with several built-in components that generate 10016 continuously — the permissions gap is intentional or a long-standing unfixed bug in many cases. In practice: if a user reports crashes, slowness, or application failure, Event 10016 is almost certainly not the cause. Look elsewhere.',
+    why_it_happens: 'Windows is built extensively on COM/DCOM — nearly every system component uses it for inter-process communication. Many COM servers have fine-grained security descriptors that restrict which accounts can launch or activate them. When an app or service (including built-in Windows processes like Explorer, Taskbar, or Update Orchestrator) tries to activate a COM server and lacks explicit permission, Event 10016 is written. Microsoft has never fixed many of these permission mismatches because the underlying operations succeed through fallback paths.',
+    what_good_looks_like: 'Present in virtually every Windows system log — this is normal. Only investigate 10016 if: the event is from a third-party application that is actually broken, the CLSID/AppID matches an application you are actively troubleshooting, or it correlates precisely with user-reported errors from that same application.',
+    common_mistakes: [
+      'Assuming Event 10016 is causing the problem the user reported — it almost never is',
+      'Spending time "fixing" 10016 by editing DCOM permissions in Component Services — this is risky and rarely necessary',
+      'Not looking past 10016 to find the actual cause (disk errors, application crashes, driver failures)'
+    ],
+    causes: [
+      'Built-in Windows components with unfixed permission mismatches (expected, ignore)',
+      'Third-party software with misconfigured DCOM registration (investigate if the app is broken)',
+      'Application running under a restricted account trying to access DCOM server (check if the app is misbehaving)'
+    ],
+    steps: [
+      'Identify the application or service generating the event from the AppID/CLSID field',
+      'If it is a Windows built-in component (Taskbar, Explorer, Update, BrokerInfrastructure): ignore it',
+      'If it is a third-party app that the user says is broken: check the vendor\'s known issues',
+      'Look past 10016 for other events that correlate with the actual reported problem',
+      'Do NOT edit DCOM security in Component Services unless specifically directed by a vendor KB'
+    ],
+    symptoms: [
+      'dcom error',
+      'event 10016',
+      'distributed com error',
+      'lots of warnings in event log',
+      'event log full of warnings'
+    ],
+    tags: ['dcom', 'com', 'permissions', 'noise', 'warning', 'harmless', 'common'],
+    powershell: `# DCOM Error Summary (to assess volume and source)
+# Eventful — These are almost always harmless. Check the source AppID.
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-DistributedCOM'
+    Id           = 10016
+    StartTime    = (Get-Date).AddDays(-1)
+} -ErrorAction SilentlyContinue |
+    Group-Object { ($_ | Select-Object -ExpandProperty Message).Substring(0, 80) } |
+    Select-Object Count, Name |
+    Sort-Object Count -Descending |
+    Format-Table -AutoSize`,
+    related_ids: [],
+    ms_docs: null
   }
 ];
