@@ -503,6 +503,10 @@ function renderEventTable(events) {
           <span class="provider-dropdown-arrow">▾</span>
         </button>
         <div class="provider-dropdown-panel" id="tbl-provider-panel" hidden>
+          <div class="provider-panel-header">
+            <button class="provider-bulk-btn" id="tbl-provider-select-all" type="button">Select all</button>
+            <button class="provider-bulk-btn" id="tbl-provider-clear" type="button">Clear</button>
+          </div>
           ${providers.length > 6 ? `<input type="search" class="provider-search" id="tbl-provider-search" placeholder="Filter…" autocomplete="off" />` : ''}
           <div class="provider-option-list">
             ${providers.map(p => `
@@ -511,7 +515,6 @@ function renderEventTable(events) {
                 <span class="provider-option-name" title="${esc(p)}">${esc(shortProvider(p))}</span>
               </label>`).join('')}
           </div>
-          <button class="provider-clear-btn" id="tbl-provider-clear" type="button" hidden>Clear</button>
         </div>
       </div>
 
@@ -549,10 +552,11 @@ function renderEventTable(events) {
     });
   });
   // Provider multi-select dropdown
-  const providerBtn   = document.getElementById('tbl-provider-btn');
-  const providerPanel = document.getElementById('tbl-provider-panel');
-  const providerLabel = document.getElementById('tbl-provider-label');
-  const providerClear = document.getElementById('tbl-provider-clear');
+  const providerBtn       = document.getElementById('tbl-provider-btn');
+  const providerPanel     = document.getElementById('tbl-provider-panel');
+  const providerLabel     = document.getElementById('tbl-provider-label');
+  const providerClear     = document.getElementById('tbl-provider-clear');
+  const providerSelectAll = document.getElementById('tbl-provider-select-all');
 
   providerBtn?.addEventListener('click', e => {
     e.stopPropagation();
@@ -565,7 +569,6 @@ function renderEventTable(events) {
     const n = tbl.providers.size;
     providerLabel.textContent = n === 0 ? 'All providers' : `${n} provider${n !== 1 ? 's' : ''}`;
     providerBtn?.classList.toggle('filtered', n > 0);
-    if (providerClear) providerClear.hidden = n === 0;
   }
 
   $eventLogFiltersWrap.querySelectorAll('.provider-cb').forEach(cb => {
@@ -582,6 +585,17 @@ function renderEventTable(events) {
     e.stopPropagation();
     tbl.providers.clear();
     $eventLogFiltersWrap.querySelectorAll('.provider-cb').forEach(cb => cb.checked = false);
+    updateProviderLabel();
+    tbl.page = 0;
+    redrawTable();
+  });
+
+  providerSelectAll?.addEventListener('click', e => {
+    e.stopPropagation();
+    $eventLogFiltersWrap.querySelectorAll('.provider-option:not([hidden]) .provider-cb').forEach(cb => {
+      cb.checked = true;
+      tbl.providers.add(cb.value);
+    });
     updateProviderLabel();
     tbl.page = 0;
     redrawTable();
