@@ -78,7 +78,7 @@ function render(query) {
   if (!results.length) {
     $list.innerHTML = `<div class="list-empty"><p>No results</p></div>`;
     $count.textContent = '';
-    showEmptyDetail();
+    showNoResults(q);
     return;
   }
 
@@ -133,6 +133,17 @@ function showEmptyDetail() {
   $detail.innerHTML = `
     <div class="detail-empty">
       <p class="detail-empty-text">Select an event to view details</p>
+    </div>
+  `;
+}
+
+function showNoResults(query) {
+  activeId = null;
+  $detail.innerHTML = `
+    <div class="detail-empty">
+      <p class="detail-no-results-title">No events found</p>
+      <p class="detail-no-results-sub">No results for <span class="detail-no-results-query">${escHtml(query)}</span></p>
+      <p class="detail-no-results-hint">Try a symptom description, event ID, or keyword — e.g. <em>account locked out</em>, <em>4625</em>, <em>blue screen</em></p>
     </div>
   `;
 }
