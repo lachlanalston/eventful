@@ -22,24 +22,10 @@ const fuse = new Fuse(allEvents, {
 });
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
-const $search       = document.getElementById('search');
-const $heroSection  = document.getElementById('hero-section');
-const $heroSearch   = document.getElementById('hero-search');
-const $resultsLayout = document.getElementById('results-layout');
-const $list         = document.getElementById('list');
-const $count        = document.getElementById('count');
-const $detail       = document.getElementById('detail');
-
-function showHero() {
-  $heroSection.hidden = false;
-  $resultsLayout.hidden = true;
-  $heroSearch?.focus();
-}
-
-function showResults() {
-  $heroSection.hidden = true;
-  $resultsLayout.hidden = false;
-}
+const $search = document.getElementById('search');
+const $list   = document.getElementById('list');
+const $count  = document.getElementById('count');
+const $detail = document.getElementById('detail');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let activeId     = null;
@@ -88,13 +74,6 @@ function buildRow(event) {
 function render(query) {
   const results = getResults(query);
   const q = query.trim();
-
-  if (!q) {
-    showHero();
-    return;
-  }
-
-  showResults();
 
   if (!results.length) {
     $list.innerHTML = `<div class="list-empty"><p>No results</p></div>`;
@@ -270,28 +249,20 @@ function wireDetail(panel, event) {
 // ── Search input ──────────────────────────────────────────────────────────────
 let timer;
 
-function handleSearchInput(value) {
+$search.addEventListener('input', () => {
   clearTimeout(timer);
   timer = setTimeout(() => {
     activeId = null;
-    $search.value = value;
-    updateUrl(value.trim());
-    render(value);
-    if (value.trim()) $search.focus();
+    const v = $search.value.trim();
+    updateUrl(v);
+    if (v) { render($search.value); $search.focus(); }
+    else window.location.href = 'event-lookup.html';
   }, 120);
-}
-
-$search.addEventListener('input', () => handleSearchInput($search.value));
-
-$search.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    $search.value = '';
-    updateUrl('');
-    render('');
-  }
 });
 
-$heroSearch?.addEventListener('input', e => handleSearchInput(e.target.value));
+$search.addEventListener('keydown', e => {
+  if (e.key === 'Escape') window.location.href = 'event-lookup.html';
+});
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 function updateUrl(q) {
@@ -309,7 +280,7 @@ if (initQ) {
   render(initQ);
   $search.focus();
 } else {
-  showHero();
+  window.location.href = 'event-lookup.html';
 }
 
 // ── Utility ───────────────────────────────────────────────────────────────────

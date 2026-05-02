@@ -4,13 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Event Lookup — Eventful</title>
+  <meta name="description" content="Search Windows event IDs by symptom or ID number. Instant lookup for MSP technicians." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="results.css" />
 </head>
 <body>
 
-  <!-- One unified header across the full page -->
   <header class="app-header">
     <a href="index.html" class="app-logo">Eventful</a>
     <div class="header-divider"></div>
@@ -19,57 +19,32 @@
       <a href="windows-log-analyzer.html" class="nav-link">Windows Log Analyzer</a>
       <a href="macos-log-analyzer.html" class="nav-link">macOS Log Analyzer</a>
     </nav>
-    <div class="app-search-wrap">
-      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-      <input id="search" type="search" class="app-search-input" autocomplete="off" spellcheck="false" />
+    <div class="header-right">
+      <button class="theme-btn" title="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
     </div>
-    <button class="theme-btn" title="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
   </header>
 
-  <!-- Hero search state -->
-  <div id="hero-section" class="lookup-hero">
+  <div class="lookup-hero">
     <div class="lookup-hero-inner">
       <h1 class="lookup-title">Search the symptom.<br>Find the Event ID.</h1>
       <p class="lookup-sub">A Windows event log reference for MSP technicians.</p>
-      <div class="lookup-search-wrap">
+      <form class="lookup-search-wrap" action="event-results.html" method="get">
         <svg class="lookup-search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        <input id="hero-search" type="search" class="lookup-search-input"
+        <input name="q" type="search" class="lookup-search-input"
           placeholder="account locked out, blue screen, 4625…"
           autocomplete="off" spellcheck="false" autofocus />
-      </div>
+      </form>
       <div class="lookup-chips">
-        <a href="?q=account+locked+out" class="chip">account locked out</a>
-        <a href="?q=blue+screen" class="chip">blue screen</a>
-        <a href="?q=rdp+disconnecting" class="chip">RDP disconnecting</a>
-        <a href="?q=service+crashed" class="chip">service crashed</a>
-        <a href="?q=4625" class="chip">Event 4625</a>
-        <a href="?q=4740" class="chip">Event 4740</a>
+        <a href="event-results.html?q=account+locked+out" class="chip">account locked out</a>
+        <a href="event-results.html?q=blue+screen" class="chip">blue screen</a>
+        <a href="event-results.html?q=rdp+disconnecting" class="chip">RDP disconnecting</a>
+        <a href="event-results.html?q=service+crashed" class="chip">service crashed</a>
+        <a href="event-results.html?q=4625" class="chip">Event 4625</a>
+        <a href="event-results.html?q=4740" class="chip">Event 4740</a>
       </div>
     </div>
   </div>
 
-  <!-- Two-panel layout below the header -->
-  <div id="results-layout" class="layout" hidden>
-
-    <aside class="sidebar">
-      <div id="count" class="result-count"></div>
-      <div id="list" class="result-list"></div>
-      <a href="windows-log-analyzer.html" class="sidebar-analyzer-cta">
-        <div class="sac-text">
-          <strong>Windows Log Analyzer</strong>
-          <span>Analyze event logs →</span>
-        </div>
-      </a>
-    </aside>
-
-    <main id="detail" class="detail-panel">
-      <div class="detail-empty">
-        <p>Select an event to view details</p>
-      </div>
-    </main>
-
-  </div>
-
-  <script type="module" src="assets/js/results.js"></script>
+  <script type="module" src="assets/js/event-lookup.js"></script>
 </body>
 </html>

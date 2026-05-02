@@ -1034,7 +1034,7 @@ function buildPanelContent(id, dbEntry, rawMatches) {
             <button class="lp-copy-ps" data-code="${esc(dbEntry.powershell)}">Copy</button>
           </div>` : ''}
         <div class="lp-doc-footer">
-          <a href="event-lookup.html?q=${id}" target="_blank" rel="noopener" class="lp-full-docs-btn">
+          <a href="event-results.html?q=${id}" target="_blank" rel="noopener" class="lp-full-docs-btn">
             Open full docs →
           </a>
           ${showAllBtn}

@@ -316,7 +316,7 @@ import{i as $e,t as ke}from"./theme-gEBc2EcC.js";/* empty css                 */
             <button class="lp-copy-ps" data-code="${u(t.powershell)}">Copy</button>
           </div>`:""}
         <div class="lp-doc-footer">
-          <a href="event-lookup.html?q=${e}" target="_blank" rel="noopener" class="lp-full-docs-btn">
+          <a href="event-results.html?q=${e}" target="_blank" rel="noopener" class="lp-full-docs-btn">
             Open full docs →
           </a>
           ${a}
