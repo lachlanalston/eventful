@@ -2323,5 +2323,261 @@ Get-PhysicalDisk | ForEach-Object {
 } | Format-Table -AutoSize`,
     related_ids: [7, 51, 129, 153, 55],
     ms_docs: null
+  },
+
+  {
+    id: 17,
+    source: 'Microsoft-Windows-WHEA-Logger',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Advanced',
+    title: 'Corrected Hardware Error (WHEA)',
+    short_desc: 'The CPU or memory hardware detected and silently corrected a hardware error — the system survived but a fault was logged.',
+    description: 'Event ID 17 from WHEA-Logger (Windows Hardware Error Architecture) means the CPU, RAM, or another hardware component detected an error internally and corrected it without crashing the system. The machine kept running, but the hardware had to intervene. Corrected hardware errors (also called corrected machine check errors or CMCEs) are significant because they indicate real hardware faults — faulty RAM, a degrading CPU, a PCI-E device with signal integrity issues, or a motherboard trace problem. A single Event 17 may be a transient glitch. Repeated Event 17 entries almost always precede Event 18 (fatal hardware error) and a BSOD. They are an early warning that hardware is degrading.',
+    why_it_happens: 'Modern CPUs include error-correcting circuits (ECC logic in caches, memory controllers with ECC if using ECC RAM, and Machine Check Architecture). When these circuits detect and correct a fault, they increment error counters. When the counter crosses a threshold, Windows logs Event 17. ECC RAM corrects single-bit memory errors — Event 17 is how Windows surfaces those corrections. Non-ECC RAM cannot correct errors, so the first indication of RAM failure on consumer hardware is often a crash rather than Event 17.',
+    what_good_looks_like: 'Absent on healthy hardware. Occasional Event 17 on a heavily loaded server with ECC RAM may be normal. Investigate on desktop/laptop hardware: any occurrence. Investigate on servers: increasing frequency over days or weeks.',
+    common_mistakes: [
+      'Dismissing Event 17 because the machine is still running fine — it will not stay fine',
+      'Not running memory diagnostics after seeing Event 17 involving memory banks',
+      'Not checking CPU temperatures — thermal stress causes correctable errors before causing crashes'
+    ],
+    causes: [
+      'Faulty or failing RAM (most common)',
+      'CPU degradation or damage (overheating, overvoltage)',
+      'Failing PCI-E device with signal integrity errors',
+      'Motherboard trace or slot fault',
+      'Overclocked system running out of stability headroom',
+      'RAM running at incorrect voltages or timings (XMP profile issues)'
+    ],
+    steps: [
+      'Note how many Event 17 entries appear and over what timeframe — increasing frequency is urgent',
+      'Check Event 18 nearby — if both are present, hardware failure is active',
+      'Check CPU temperatures under load (HWMonitor, Core Temp)',
+      'Run Windows Memory Diagnostic: mdsched.exe — or better, Memtest86 overnight',
+      'If memory errors found: try RAM sticks one at a time to isolate the faulty module',
+      'Check BIOS — disable XMP/DOCP profiles and run RAM at stock speeds as a test',
+      'If CPU-related: check thermal paste, check for physical damage'
+    ],
+    symptoms: [
+      'random crashes',
+      'random blue screens',
+      'hardware error',
+      'memory error',
+      'cpu error',
+      'system instability',
+      'bsod different errors each time',
+      'random bsod codes'
+    ],
+    tags: ['hardware', 'whea', 'ram', 'cpu', 'memory', 'error-correction', 'crash', 'instability'],
+    powershell: `# WHEA Hardware Error Investigation
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-WHEA-Logger'
+    Id           = @(17, 18)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id,
+        @{N='Severity'; E={ if ($_.Id -eq 18) {'FATAL'} else {'CORRECTED'} }},
+        LevelDisplayName |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize
+
+# Check event frequency (rising count = accelerating failure)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-WHEA-Logger'
+    Id           = @(17, 18)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | Measure-Object | Select-Object Count`,
+    related_ids: [18, 41, 1001],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-hardware/drivers/whea/windows-hardware-error-architecture-overview'
+  },
+
+  {
+    id: 18,
+    source: 'Microsoft-Windows-WHEA-Logger',
+    channel: 'System',
+    severity: 'Critical',
+    skill_level: 'Advanced',
+    title: 'Fatal Hardware Error (WHEA)',
+    short_desc: 'An unrecoverable hardware error caused the system to crash — RAM, CPU, PCI-E, or firmware fault.',
+    description: 'Event ID 18 from WHEA-Logger is a Critical-level event written when a hardware component reports a fatal, unrecoverable error that forces the system to crash (BSOD). Unlike Event 41 (unexpected reboot, which covers any crash type including software) or Event 1001 (minidump, which is written after the crash), Event 18 specifically points to a hardware-level failure — the CPU, RAM, chipset, or a PCI-E device triggered a Machine Check Exception (MCE) that could not be corrected. If you see Event 18 in a log, the cause of the crash is hardware, not software. This fundamentally changes the investigation: no amount of driver updates or OS reinstalls will fix it.',
+    why_it_happens: 'The Machine Check Architecture (MCA) built into modern CPUs monitors for hardware errors. When a fatal, uncorrectable error occurs — a multi-bit memory error (uncorrectable by ECC), a CPU cache error, a PCI-E bus error, or a firmware-detected fault — the CPU triggers a Machine Check Exception. Windows cannot continue and crashes. WHEA logs Event 18 with detailed error records identifying which hardware component failed and what type of error occurred.',
+    what_good_looks_like: 'Absence is normal. Any occurrence of Event 18 means hardware failed and caused the crash — investigation is required. This is not a software problem.',
+    common_mistakes: [
+      'Reinstalling Windows after a WHEA 18 crash — OS reinstall will not fix a hardware fault',
+      'Blaming a driver when Event 18 is present — the driver may surface the error but hardware is the root cause',
+      'Not running memory diagnostics — RAM is the most common cause of WHEA 18 on consumer hardware',
+      'Missing that overclocking causes WHEA 18 — first step on an overclocked system is reset BIOS to defaults'
+    ],
+    causes: [
+      'Failing or failed RAM module (most common on consumer hardware)',
+      'CPU fault — physical damage, overheating, overvoltage',
+      'Failing PCI-E device (GPU, NVMe drive, network card)',
+      'Motherboard fault — trace damage, failing VRMs',
+      'Overclocking instability',
+      'Firmware/UEFI bug triggering a false hardware error report'
+    ],
+    steps: [
+      'Confirm Event 18 exists — this changes the investigation from software to hardware',
+      'Check if system is overclocked — reset BIOS to defaults as first step',
+      'Run Memtest86 (bootable USB, run overnight) — most thorough RAM test',
+      'If Event 17 also present: hardware was degrading before the fatal event',
+      'Check CPU temperature logs — WHEA 18 from thermal damage shows sustained high temps before crash',
+      'Check Event 1001 for the bugcheck code — the WHEA-specific bugchecks are 0x124 (WHEA_UNCORRECTABLE_ERROR) and 0x19C',
+      'If RAM tests pass: test with one component at a time (swap GPU, test NVMe on another system)',
+      'Consider professional hardware diagnostics if component swap testing is not possible'
+    ],
+    symptoms: [
+      'bsod whea uncorrectable error',
+      'blue screen 0x124',
+      'hardware crash',
+      'random blue screen',
+      'computer crashes under load',
+      'gaming causes crash',
+      'crash during heavy use',
+      'memory hardware error',
+      'cpu error crash'
+    ],
+    tags: ['hardware', 'whea', 'fatal', 'crash', 'bsod', 'ram', 'cpu', 'mce', 'critical'],
+    powershell: `# Fatal Hardware Error Investigation
+# Eventful
+
+# WHEA fatal and corrected errors
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-WHEA-Logger'
+    Id           = @(17, 18)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, LevelDisplayName, Message |
+    Sort-Object TimeCreated | Format-List
+
+# Corresponding crash dumps
+Get-WinEvent -FilterHashtable @{
+    LogName = 'System'
+    Id      = @(41, 1001)
+    StartTime = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated | Format-List`,
+    related_ids: [17, 41, 1001],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-hardware/drivers/whea/windows-hardware-error-architecture-overview'
+  },
+
+  {
+    id: 46,
+    source: 'volmgr',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Crash Dump Initialization Failed',
+    short_desc: 'Windows could not set up crash dump — no minidumps will be saved when the machine crashes.',
+    description: 'Event ID 46 from volmgr means Windows tried to configure its crash dump facility during boot and failed. The consequence: when the machine crashes (BSOD), no minidump file is written to disk. This creates a diagnostic dead end — Event 41 shows the machine crashed, but there is no Event 1001, no minidump in C:\\Windows\\Minidump, and no way to do post-crash analysis. The root cause is almost always a missing or undersized page file on the system drive. Windows requires a page file at least as large as physical RAM to capture a complete memory dump, or at least 1 MB to capture a minidump.',
+    why_it_happens: 'Windows crash dump is written to the page file on the system drive (C:) at the moment of a crash, then extracted to a .dmp file on next boot. If there is no page file, or the page file is on a different drive than the OS, or the page file is too small, the crash dump system cannot initialise and logs Event 46. Common causes: administrators disabling the page file to "improve performance" (this is a myth and also breaks crash dumps), drive running out of space causing the page file to be removed, or the OS installed to a drive without a page file configured.',
+    what_good_looks_like: 'Absence is normal. Any occurrence means you will get no crash data when the machine BSODs — fix before the next crash.',
+    common_mistakes: [
+      'Disabling the page file thinking it improves performance — it does not, and it breaks crash dump and some applications',
+      'Putting the page file on a non-system drive — crash dump requires it on the C: drive',
+      'Not checking disk space — Windows will reduce or remove the page file if C: fills up'
+    ],
+    causes: [
+      'Page file disabled or set to zero on system drive',
+      'Page file located on non-system drive only',
+      'Page file too small (less than 1 MB prevents even minidumps)',
+      'C: drive full — Windows removed page file automatically',
+      'Corrupt page file configuration in registry'
+    ],
+    steps: [
+      'Check current page file: System Properties → Advanced → Performance → Settings → Advanced → Virtual Memory',
+      'Ensure page file exists on C: drive — set to "System managed" if unsure',
+      'Check free space on C: — page file needs room to grow: Get-PSDrive C | Select-Object Used, Free',
+      'After fixing page file: reboot and verify Event 46 is gone on next boot',
+      'To confirm crash dumps are now working: check C:\\Windows\\Minidump after next crash',
+      'Minimum for minidumps: 1 MB page file on C:. Minimum for complete memory dump: RAM size + 1 MB'
+    ],
+    symptoms: [
+      'no minidump after crash',
+      'no crash dump',
+      'minidump folder empty',
+      'bsod no dump file',
+      'crash analysis impossible',
+      'event 41 no event 1001',
+      'page file missing'
+    ],
+    tags: ['crash-dump', 'minidump', 'page-file', 'bsod', 'diagnostic', 'volmgr'],
+    powershell: `# Crash Dump Configuration Check
+# Eventful
+
+# Check for dump init failures
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'volmgr'
+    Id           = 46
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message | Format-List
+
+# Current page file configuration
+Get-WmiObject Win32_PageFileSetting | Select-Object Name, InitialSize, MaximumSize
+Get-WmiObject Win32_PageFileUsage  | Select-Object Name, CurrentUsage, PeakUsage, AllocatedBaseSize
+
+# Free space on system drive
+Get-PSDrive C | Select-Object Used, Free`,
+    related_ids: [41, 1001],
+    ms_docs: null
+  },
+
+  {
+    id: 157,
+    source: 'disk',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Beginner',
+    title: 'Disk Surprise Removed',
+    short_desc: 'A disk was physically disconnected without being safely ejected — potential data loss or corruption.',
+    description: 'Event ID 157 from the disk driver is written when a storage device is physically removed while Windows still had it mounted — a "surprise removal." This is most commonly a USB drive, external hard drive, or SD card pulled out without using "Safely Remove Hardware." It can also occur with internal drives if a SATA cable fails or a drive loses power mid-operation. The risk is data loss and file system corruption: any files with open write handles at the time of removal may be partially written, and the file system may be in an inconsistent state requiring chkdsk on next connection. On laptops with external drives used for backup, this event appearing outside of intentional removal is a sign of a failing cable or enclosure.',
+    why_it_happens: 'Windows keeps storage devices mounted as long as they are connected and used. Surprise removal bypasses the normal dismount sequence — write buffers are not flushed, open file handles are not closed cleanly, and the file system journal is not committed. The disk driver detects the device has vanished from the bus and logs Event 157.',
+    what_good_looks_like: 'Absent for internal drives under all circumstances — any Event 157 on an internal disk is a hardware fault. For external drives, occasional occurrences during intentional removal without using Safely Remove are low priority. Recurring Event 157 on an external backup drive at unexpected times indicates a failing cable, enclosure, or USB port.',
+    causes: [
+      'USB/external drive physically removed without safe eject',
+      'Failing SATA cable on internal drive losing contact',
+      'Failing drive enclosure or USB adapter',
+      'Power interruption to internal or external drive',
+      'Loose USB connection on laptop (bumped cable)',
+      'USB hub losing power under load'
+    ],
+    steps: [
+      'Identify the affected device from the event',
+      'For external drives: run chkdsk on next connection to check file system integrity',
+      'For internal drives: immediate hardware investigation — check SATA cable, power connector',
+      'If recurring on external backup drive at unexpected times: replace the cable and enclosure',
+      'Check Event 7 and 11 alongside 157 — combined with disk read errors suggests failing drive not just cable',
+      'Enable write caching safely: only disable write caching on USB drives in Device Manager if you consistently safe-eject'
+    ],
+    symptoms: [
+      'drive disconnected unexpectedly',
+      'usb drive removed without ejecting',
+      'external drive disappeared',
+      'backup drive disconnected',
+      'drive letter disappeared',
+      'files corrupted on usb drive',
+      'internal drive disconnected'
+    ],
+    tags: ['disk', 'storage', 'usb', 'removal', 'external', 'data-loss', 'corruption'],
+    powershell: `# Disk Surprise Removal History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'disk'
+    Id           = @(157, 7, 11)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [7, 11, 51, 27],
+    ms_docs: null
   }
 ];

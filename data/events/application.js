@@ -391,5 +391,124 @@ Get-WinEvent -FilterHashtable @{
 # Run as admin: lodctr /r`,
     related_ids: [1000],
     ms_docs: null
+  },
+
+  {
+    id: 1033,
+    source: 'MsiInstaller',
+    channel: 'Application',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'Software Installed or Removed',
+    short_desc: 'Windows Installer recorded a software installation, removal, or update — useful for correlating "started after installing X" complaints.',
+    description: 'Event ID 1033 (and related 1034, 11707) from MsiInstaller is written whenever a Windows Installer (MSI) package is installed, updated, or removed. It records the product name, version, manufacturer, and whether the operation succeeded. This event is invaluable for the common support scenario: a user says "my computer started crashing / running slowly / application stopped working — nothing changed" — checking MsiInstaller events often reveals a software install or update that happened just before the problems began. Related event 1034 covers uninstallation, and 11707/11708 cover installation success/failure in older MSI formats.',
+    why_it_happens: 'Written by the Windows Installer service (msiexec.exe) on completion of any MSI-based install or remove operation. Not all software uses MSI — modern installers (MSIX, Squirrel, Inno Setup, NSIS) may not produce this event — but most enterprise and traditional desktop software does.',
+    what_good_looks_like: 'Correlate timestamps with reported problem onset. Expected installs (Windows Update components, known software rollouts) are normal. Investigate: installs that coincide exactly with when a user says problems started, software installed outside business hours, unrecognised software, or multiple rapid installs from the same manufacturer.',
+    causes: [
+      'User or admin installing software',
+      'Windows Update installing components via MSI',
+      'Software auto-updater running in background',
+      'IT management tool pushing a deployment',
+      'Malware installer (if software name is unrecognised)'
+    ],
+    steps: [
+      'Filter Application log for Event 1033 and 1034 around the time problems started',
+      'Note the product name, version, and manufacturer',
+      'If a suspicious install coincides with problem onset: uninstall it and test',
+      'Cross-reference with Event 1000 (app crashes) timestamps — did crashes start after the install?',
+      'For Windows Update MSI components: check Windows Update history in Settings for the same timeframe',
+      'To see all recently installed software: Get-WmiObject Win32_Product | Sort-Object InstallDate -Descending'
+    ],
+    symptoms: [
+      'started after installing something',
+      'problem after update',
+      'new software causing issues',
+      'software install timeline',
+      'what was installed recently',
+      'crashes after software update',
+      'application conflict'
+    ],
+    tags: ['installer', 'msi', 'software', 'installation', 'timeline', 'change-tracking'],
+    powershell: `# Software Installation History
+# Eventful
+
+# MSI install/remove events (last 30 days)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'MsiInstaller'
+    Id           = @(1033, 1034, 11707, 11708)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $type = switch ($_.Id) {
+        1033  { 'INSTALLED'   }
+        1034  { 'REMOVED'     }
+        11707 { 'SUCCESS'     }
+        11708 { 'FAILED'      }
+    }
+    [PSCustomObject]@{
+        Time    = $_.TimeCreated
+        Type    = $type
+        Message = $_.Message.Substring(0, [Math]::Min(120, $_.Message.Length))
+    }
+} | Sort-Object Time -Descending | Format-Table -AutoSize`,
+    related_ids: [1000, 1002, 11708],
+    ms_docs: null
+  },
+
+  {
+    id: 11708,
+    source: 'MsiInstaller',
+    channel: 'Application',
+    severity: 'Error',
+    skill_level: 'Beginner',
+    title: 'Software Installation Failed',
+    short_desc: 'A Windows Installer package failed to install — records the product name and error code.',
+    description: 'Event ID 11708 from MsiInstaller is written when an MSI installation fails. It records the product name and the error code. This pairs with Event 1033 (which records successful installs) to give a complete picture of software change activity. Installation failures are relevant in IT support when: a user cannot install required software, a Windows Update component fails to install via MSI, or a deployment tool reports installation failure. The error code in the event maps to a specific failure reason. Common codes: 1603 = fatal error during installation (permissions, disk space, conflicting process), 1618 = another installation already in progress, 1619 = package file not found.',
+    why_it_happens: 'MSI installations fail for several reasons: insufficient permissions (the installer needs admin rights), the package requires a reboot from a previous install before it can proceed, disk space is insufficient, the package is corrupt, a prerequisite is missing, or antivirus is blocking the installer from writing files.',
+    what_good_looks_like: 'Absence is ideal. Occasional 11708 for background auto-updaters that retry successfully is low priority. Investigate: 11708 for software a user is actively trying to install, repeated 11708 for the same product (blocked by a persistent condition), or 11708 for a Windows component that is required for system functionality.',
+    causes: [
+      'Installation run without administrator rights',
+      'Pending reboot blocking installation (error 1618)',
+      'Insufficient disk space on C:',
+      'Antivirus blocking installer file operations',
+      'Corrupt MSI package',
+      'Missing prerequisite (e.g., required .NET version not installed)',
+      'Conflicting software already installed'
+    ],
+    steps: [
+      'Note the error code from the event',
+      '1603: Run installer as admin, check disk space, check AV exclusions, check for pending reboot',
+      '1618: Another installer is running — wait and retry, or reboot first',
+      '1619: Package file path is missing or inaccessible',
+      'Enable verbose MSI logging: msiexec /i package.msi /l*v install.log',
+      'Check the verbose log for the exact line that failed',
+      'Check free disk space: Get-PSDrive C | Select-Object Used, Free'
+    ],
+    symptoms: [
+      'installation failed',
+      'software wont install',
+      'msi error',
+      'setup failed',
+      'install error 1603',
+      'cannot install application',
+      'deployment failed'
+    ],
+    tags: ['installer', 'msi', 'installation', 'failure', 'error', 'software'],
+    powershell: `# Installation Failure Details
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'MsiInstaller'
+    Id           = @(11708, 1033, 1034)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# Enable verbose MSI logging for next install attempt:
+# msiexec /i "C:\path\to\package.msi" /l*v "C:\install-log.txt"`,
+    related_ids: [1033, 1000],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/msi/windows-installer-error-messages'
   }
 ];
