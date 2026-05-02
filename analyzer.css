@@ -1448,6 +1448,56 @@ ul, ol { list-style: none; }
 
 .ev-detail-lookup-btn:hover { background: var(--amber-glow); }
 
+/* Occurrence count bar */
+.ev-occurrence-bar {
+  grid-column: 1 / -1;
+  font-size: 11px;
+  color: var(--text3);
+  padding: 5px 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+}
+.ev-occurrence-bar strong { color: var(--amber); font-weight: 600; }
+
+/* Message + copy button */
+.ev-detail-message-wrap {
+  grid-column: 1 / -1;
+  position: relative;
+}
+.ev-detail-message-wrap .ev-detail-message { padding-right: 36px; }
+
+.ev-copy-btn {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  background: none;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  padding: 3px 5px;
+  color: var(--text3);
+  cursor: pointer;
+  line-height: 1;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+}
+.ev-copy-btn:hover { border-color: var(--amber); color: var(--amber); }
+.ev-copy-btn.copied { border-color: var(--success, #22c55e); color: var(--success, #22c55e); }
+
+/* 2-col inline grid (incident card evidence/timeline detail) */
+.ev-inline-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+@media (max-width: 700px) { .ev-inline-grid { grid-template-columns: 1fr; } }
+
+/* ev-advanced-section inside ev-inline-detail */
+.ev-inline-detail .ev-advanced-section { display: none; flex-direction: column; gap: 6px; }
+.ev-inline-detail .ev-advanced-section.ev-advanced-open { display: flex; }
+.ev-inline-detail .ev-detail-actions { grid-column: unset; padding-top: 0; }
+
 /* Table column helpers */
 .ev-col-time { font-family: var(--mono); font-size: 11px; color: var(--text3); white-space: nowrap; }
 .ev-col-provider { font-family: var(--mono); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
