@@ -220,9 +220,43 @@ function renderIncidents(incidents) {
     });
   });
 
+  // Wire evidence expand/collapse
+  $incidentsSection.querySelectorAll('.evidence-item').forEach(item => {
+    item.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.target.closest('[data-lookup-id]')) return;
+      const wrap = item.closest('.evidence-wrap');
+      const detail = wrap.querySelector('.evidence-detail');
+      const chevron = item.querySelector('.ev-expand-chevron');
+      const isOpen = !detail.hidden;
+      detail.hidden = isOpen;
+      item.classList.toggle('expanded', !isOpen);
+      if (chevron) chevron.textContent = isOpen ? '▶' : '▼';
+    });
+  });
+
+  // Wire timeline expand/collapse
+  $incidentsSection.querySelectorAll('.timeline-item').forEach(item => {
+    item.addEventListener('click', e => {
+      e.stopPropagation();
+      if (e.target.closest('[data-lookup-id]')) return;
+      const wrap = item.closest('.timeline-item-wrap');
+      if (!wrap) return;
+      const detail = wrap.querySelector('.timeline-detail');
+      if (!detail) return;
+      const chevron = item.querySelector('.tl-expand-chevron');
+      const isOpen = !detail.hidden;
+      detail.hidden = isOpen;
+      if (chevron) chevron.textContent = isOpen ? '▶' : '▼';
+    });
+  });
+
   // Wire up event ID lookup links
   $incidentsSection.querySelectorAll('[data-lookup-id]').forEach(el => {
-    el.addEventListener('click', () => openLookupPanel(el.dataset.lookupId));
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      openLookupPanel(el.dataset.lookupId);
+    });
   });
 }
 
@@ -276,12 +310,16 @@ function renderIncidentCard(inc, index) {
           <div class="incident-section-label">Contributing events (${topContributors.length} found)</div>
           <div class="evidence-list">
             ${topContributors.slice(0, 6).map(({ event, score }) => `
-              <div class="evidence-item" data-lookup-id="${event.id}" title="Look up Event ${event.id}">
-                <span class="ev-sev-dot sev-${event.severity.toLowerCase()}"></span>
-                <span class="ev-id">${event.id}</span>
-                <span class="ev-provider">${esc(shortProvider(event.provider))}</span>
-                <span class="ev-time">${formatTime(event.timestamp)}</span>
-                <span class="ev-score" title="Relevance score">${score}</span>
+              <div class="evidence-wrap">
+                <div class="evidence-item">
+                  <span class="ev-sev-dot sev-${event.severity.toLowerCase()}"></span>
+                  <span class="ev-id" data-lookup-id="${event.id}" title="Look up Event ${event.id}">${event.id}</span>
+                  <span class="ev-provider">${esc(shortProvider(event.provider))}</span>
+                  <span class="ev-time">${formatTime(event.timestamp)}</span>
+                  <span class="ev-score" title="Relevance score">${score}</span>
+                  <span class="ev-expand-chevron">▶</span>
+                </div>
+                <div class="evidence-detail" hidden>${buildEventDetail(event)}</div>
               </div>
             `).join('')}
           </div>
@@ -344,14 +382,18 @@ function renderMiniTimeline(events, anchor) {
           }
           const isAnchor = ev === anchor;
           return `
-            <div class="timeline-item ${isAnchor ? 'timeline-anchor' : ''}" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">
-              <div class="tl-dot sev-${ev.severity?.toLowerCase()}"></div>
-              <div class="tl-content">
-                <span class="tl-time">${formatTime(ev.timestamp)}</span>
-                <span class="tl-id">${ev.id}</span>
-                <span class="tl-provider">${esc(shortProvider(ev.provider))}</span>
-                ${isAnchor ? '<span class="tl-anchor-label">ANCHOR</span>' : ''}
+            <div class="timeline-item-wrap">
+              <div class="timeline-item ${isAnchor ? 'timeline-anchor' : ''}">
+                <div class="tl-dot sev-${ev.severity?.toLowerCase()}"></div>
+                <div class="tl-content">
+                  <span class="tl-time">${formatTime(ev.timestamp)}</span>
+                  <span class="tl-id" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">${ev.id}</span>
+                  <span class="tl-provider">${esc(shortProvider(ev.provider))}</span>
+                  ${isAnchor ? '<span class="tl-anchor-label">ANCHOR</span>' : ''}
+                </div>
+                <span class="tl-expand-chevron">▶</span>
               </div>
+              <div class="timeline-detail" hidden>${buildEventDetail(ev)}</div>
             </div>
           `;
         }).join('')}
@@ -769,15 +811,6 @@ function openLookupPanel(eventId) {
     });
   });
 
-  // Wire Advanced toggles
-  $body.querySelectorAll('.lp-advanced-toggle').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const section = btn.nextElementSibling;
-      const open = section.classList.toggle('lp-advanced-open');
-      btn.textContent = open ? 'Advanced ▲' : 'Advanced ▼';
-    });
-  });
-
   // Wire "Show all in log" button
   $body.querySelectorAll('.lp-show-in-log').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -803,11 +836,13 @@ function closeLookupPanel() {
 }
 
 function buildPanelContent(id, dbEntry, rawMatches) {
-  // ── Left column: Knowledge Base ──
-  let kbHtml;
+  const showAllBtn = rawMatches.length
+    ? `<button class="lp-show-in-log" data-filter-id="${id}">Show all ${rawMatches.length} occurrence${rawMatches.length !== 1 ? 's' : ''} in All Events →</button>`
+    : '';
+
   if (dbEntry) {
     const sev = dbEntry.severity?.toLowerCase() ?? 'info';
-    kbHtml = `
+    return `
       <div class="lp-section">
         <div class="lp-section-label">Knowledge Base</div>
         <div class="lp-doc-header">
@@ -841,104 +876,66 @@ function buildPanelContent(id, dbEntry, rawMatches) {
           <a href="results.html?q=${id}" target="_blank" rel="noopener" class="lp-full-docs-btn">
             Open full docs →
           </a>
-        </div>
-      </div>`;
-  } else {
-    kbHtml = `
-      <div class="lp-section">
-        <div class="lp-section-label">Knowledge Base</div>
-        <div class="lp-no-doc-state">
-          <div class="lp-no-doc-title">No documentation for Event ${id}</div>
-          <div class="lp-no-doc-sub">This event ID is not in the Eventful knowledge base.</div>
+          ${showAllBtn}
         </div>
       </div>`;
   }
 
-  // ── Right column: Raw events from uploaded log ──
-  let rawHtml;
-  if (rawMatches.length === 0) {
-    rawHtml = `
-      <div class="lp-section">
-        <div class="lp-section-label">From your log</div>
-        <div class="lp-no-raw">No events with this ID in the uploaded log.</div>
-      </div>`;
-  } else {
-    const shown = rawMatches.slice(0, 3);
-    rawHtml = `
-      <div class="lp-section">
-        <div class="lp-section-label">
-          From your log
-          ${rawMatches.length > 1 ? `<span class="lp-raw-count">${rawMatches.length} occurrences</span>` : ''}
-        </div>
-        ${shown.map((ev, i) => {
-          const taskDisp   = ev.taskName   || ev.opcode || null;
-          const opcodeDisp = ev.opcodeName || ev.opcode || null;
-          const kwDisp     = ev.keywordNames?.length ? ev.keywordNames.join(', ') : (ev.keywords || null);
-          const anonData   = ev.dataAnon || [];
-          const advFields  = [
-            ['Raw Level',       String(ev.levelNum)],
-            ['Raw Task',        ev.task],
-            ['Raw Opcode',      ev.opcode],
-            ['Raw Keywords',    ev.keywords],
-            ['Version',         ev.version],
-            ['Qualifiers',      ev.qualifiers],
-            ['Provider Desc.',  ev.providerDescription],
-            ['Related Act. ID', ev.relatedActivityId],
-          ].filter(([, v]) => v);
-          return `
-          ${i > 0 ? '<div class="lp-raw-divider"></div>' : ''}
-          <div class="lp-raw-fields">
-            ${lpField('Time', ev.timestamp.toLocaleString())}
-            ${lpField('Severity', `<span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span>`)}
-            ${lpField('Provider', esc(shortProvider(ev.provider)))}
-            ${lpField('Channel', esc(ev.channel))}
-            ${lpField('Computer', esc(ev.computer || '—'))}
-            ${lpField('Record ID', String(ev.recordId || '—'))}
-            ${ev.processId  ? lpField('Process ID',  String(ev.processId))  : ''}
-            ${ev.threadId   ? lpField('Thread ID',   String(ev.threadId))   : ''}
-            ${ev.userSID    ? lpField('User SID',    esc(ev.userSID))       : ''}
-            ${ev.activityId ? lpField('Activity ID', esc(ev.activityId))   : ''}
-            ${taskDisp      ? lpField('Task',        esc(taskDisp))         : ''}
-            ${opcodeDisp    ? lpField('Opcode',      esc(opcodeDisp))       : ''}
-            ${kwDisp        ? lpField('Keywords',    esc(kwDisp))           : ''}
-          </div>
-          ${ev.message
-            ? `<div class="lp-raw-message-label">Message</div>
-               <div class="lp-raw-message">${esc(ev.message)}</div>`
-            : `<div class="lp-raw-message-label">Message</div>
-               <div class="lp-raw-message lp-no-message">Message not rendered — Windows message templates are stored on the source machine. Export directly from the affected computer to see full event messages.</div>`}
-          ${Object.keys(ev.data || {}).length || anonData.length ? `
-            <div class="lp-raw-message-label">Event Data</div>
-            <div class="lp-raw-data">
-              ${Object.entries(ev.data).map(([k, v]) => `
-                <div class="lp-raw-data-row">
-                  <span class="lp-raw-data-key">${esc(k)}</span>
-                  <span class="lp-raw-data-val">${esc(String(v))}</span>
-                </div>`).join('')}
-              ${anonData.map((v, idx) => `
-                <div class="lp-raw-data-row">
-                  <span class="lp-raw-data-key lp-raw-data-key--anon">[${idx}]</span>
-                  <span class="lp-raw-data-val">${esc(String(v))}</span>
-                </div>`).join('')}
-            </div>` : ''}
-          ${advFields.length ? `
-            <button class="lp-advanced-toggle">Advanced ▼</button>
-            <div class="lp-advanced-section">
-              <div class="lp-raw-message-label">Advanced / Raw</div>
-              <div class="lp-raw-fields">
-                ${advFields.map(([k, v]) => lpField(k, esc(v))).join('')}
-              </div>
-            </div>` : ''}
-          `;
-        }).join('')}
-        ${rawMatches.length > 3
-          ? `<div class="lp-raw-more">+ ${rawMatches.length - 3} more occurrence${rawMatches.length - 3 !== 1 ? 's' : ''} in log</div>`
-          : ''}
-        <button class="lp-show-in-log" data-filter-id="${id}">Show all ${rawMatches.length} in All Events →</button>
-      </div>`;
-  }
+  return `
+    <div class="lp-section">
+      <div class="lp-section-label">Knowledge Base</div>
+      <div class="lp-no-doc-state">
+        <div class="lp-no-doc-title">No documentation for Event ${id}</div>
+        <div class="lp-no-doc-sub">This event ID is not in the Eventful knowledge base.</div>
+      </div>
+      ${showAllBtn}
+    </div>`;
+}
 
-  return `<div class="lp-col lp-col-kb">${kbHtml}</div><div class="lp-col lp-col-raw">${rawHtml}</div>`;
+function buildEventDetail(ev) {
+  const taskDisp   = ev.taskName   || ev.task   || null;
+  const opcodeDisp = ev.opcodeName || ev.opcode || null;
+  const kwDisp     = ev.keywordNames?.length ? ev.keywordNames.join(', ') : (ev.keywords || null);
+  const anonData   = ev.dataAnon || [];
+  const dataKeys   = Object.keys(ev.data || {});
+
+  return `
+    <div class="ev-inline-detail">
+      <div class="lp-raw-fields">
+        ${lpField('Time', ev.timestamp.toLocaleString())}
+        ${lpField('Severity', `<span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span>`)}
+        ${lpField('Provider', esc(ev.provider || '—'))}
+        ${lpField('Channel', esc(ev.channel || '—'))}
+        ${ev.computer   ? lpField('Computer',   esc(ev.computer))        : ''}
+        ${ev.recordId   ? lpField('Record ID',  String(ev.recordId))     : ''}
+        ${ev.processId  ? lpField('Process ID', String(ev.processId))    : ''}
+        ${ev.userSID    ? lpField('User SID',   esc(ev.userSID))         : ''}
+        ${taskDisp      ? lpField('Task',       esc(taskDisp))           : ''}
+        ${opcodeDisp    ? lpField('Opcode',     esc(opcodeDisp))         : ''}
+        ${kwDisp        ? lpField('Keywords',   esc(kwDisp))             : ''}
+      </div>
+      <div class="lp-raw-message-label">Message</div>
+      ${ev.message
+        ? `<div class="lp-raw-message">${esc(ev.message)}</div>`
+        : `<div class="lp-raw-message lp-no-message">Message not rendered — Windows message templates are stored on the source machine. Export from the affected computer to see full messages.</div>`}
+      ${dataKeys.length || anonData.length ? `
+        <div class="lp-raw-message-label">Event Data</div>
+        <div class="lp-raw-data">
+          ${dataKeys.map(k => `
+            <div class="lp-raw-data-row">
+              <span class="lp-raw-data-key">${esc(k)}</span>
+              <span class="lp-raw-data-val">${esc(String(ev.data[k]))}</span>
+            </div>`).join('')}
+          ${anonData.map((v, i) => `
+            <div class="lp-raw-data-row">
+              <span class="lp-raw-data-key lp-raw-data-key--anon">[${i}]</span>
+              <span class="lp-raw-data-val">${esc(String(v))}</span>
+            </div>`).join('')}
+        </div>` : ''}
+      <div class="ev-detail-actions">
+        <span class="ev-detail-lookup-btn" data-lookup-id="${ev.id}">Look up Event ${ev.id} →</span>
+      </div>
+    </div>`;
 }
 
 function lpField(label, value) {

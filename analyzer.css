@@ -753,6 +753,33 @@ ul, ol { list-style: none; }
 
 .evidence-item:hover { border-color: var(--amber-glow); background: var(--surface3); }
 
+.evidence-wrap { display: flex; flex-direction: column; }
+
+.evidence-item.expanded {
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+  border-bottom-color: transparent;
+}
+
+.ev-expand-chevron {
+  font-size: 9px;
+  color: var(--text3);
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.ev-inline-detail {
+  padding: 12px 14px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 var(--r-sm) var(--r-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
 .ev-sev-dot {
   width: 8px;
   height: 8px;
@@ -823,6 +850,21 @@ ul, ol { list-style: none; }
 }
 
 .timeline-item:hover { background: var(--surface2); }
+
+.timeline-item-wrap { display: block; }
+
+.tl-expand-chevron {
+  font-size: 9px;
+  color: var(--text3);
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.timeline-detail {
+  margin-left: 4px;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  margin-bottom: 2px;
+}
 
 .timeline-anchor {
   background: var(--surface2);
@@ -1442,7 +1484,7 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
   position: absolute;
   top: 0;
   right: 0;
-  width: 840px;
+  width: 480px;
   max-width: 100vw;
   height: 100%;
   background: var(--surface);
@@ -1489,23 +1531,13 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
 
 .lp-body {
   flex: 1;
-  display: flex;
-  overflow: hidden;
-}
-
-.lp-col {
-  flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border2) transparent;
 }
 
-.lp-col::-webkit-scrollbar { width: 4px; }
-.lp-col::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-.lp-col-raw {
-  border-left: 1px solid var(--border2);
-}
+.lp-body::-webkit-scrollbar { width: 4px; }
+.lp-body::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
 /* Panel sections */
 .lp-section {
@@ -1865,14 +1897,8 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
   padding: 8px 0;
 }
 
-@media (max-width: 860px) {
-  .lp-drawer { width: 100vw; border-left: none; }
-  .lp-body { flex-direction: column; overflow-y: auto; overflow-x: hidden; }
-  .lp-col { flex: none; overflow-y: visible; }
-  .lp-col-raw { border-left: none; border-top: 1px solid var(--border2); }
-}
-
 @media (max-width: 540px) {
+  .lp-drawer { width: 100vw; border-left: none; }
   .lp-raw-fields { grid-template-columns: 1fr; }
 }
 
