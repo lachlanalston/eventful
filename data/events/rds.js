@@ -524,5 +524,248 @@ Get-WinEvent -ComputerName $computer -FilterHashtable @{
 } | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
     related_ids: [21, 41, 4624, 4625],
     ms_docs: null
+  },
+
+  {
+    id: 1057,
+    source: 'Microsoft-Windows-TerminalServices-RemoteConnectionManager',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'RDS — Cannot Create or Bind TLS/SSL Certificate for RDP',
+    short_desc: 'Remote Desktop Services cannot create or use a TLS certificate — RDP connections will use weaker security or fail.',
+    description: 'Event 1057 is logged by the Remote Desktop Connection Manager when the RDS service cannot create a self-signed certificate, enroll for a certificate from the CA, or bind an existing certificate to the RDP listener. When this happens, RDP may fall back to a weaker security layer or users may receive certificate warnings when connecting. NLA (Network Level Authentication) requires a valid TLS certificate and may fail entirely if the certificate is missing.',
+    why_it_happens: 'Certificate issues arise when the Remote Desktop Services machine certificate (auto-enrolled via GPO) has expired, when the CA is unreachable for renewal, when the RDS server does not have the "Remote Desktop Services" certificate template permission, or when the certificate thumbprint in the RDS registry is outdated after a certificate renewal.',
+    what_good_looks_like: 'RDS has a valid, trusted machine certificate bound to the RDP listener. Users do not receive certificate warnings when connecting. NLA authentication works. Certificate thumbprint in HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\\SSLCertificateSHA1Hash matches a valid cert in certlm.msc.',
+    common_mistakes: [
+      'Manually configuring a certificate thumbprint in registry and then forgetting to update it when the certificate renews',
+      'Not deploying a CA-issued certificate for RDS — self-signed certs cause trust warnings for all users',
+      'Not granting the computer account Enroll permission on the Remote Desktop Services certificate template'
+    ],
+    causes: [
+      'Machine certificate for RDS has expired and renewal failed',
+      'Certificate thumbprint in RDS registry points to a certificate that no longer exists',
+      'Auto-enrollment GPO not configured or CA unreachable',
+      'Computer account lacks Enroll permission on the certificate template',
+      'Certificate store corrupted or certificate accidentally deleted'
+    ],
+    steps: [
+      'Check Event 1057 message for specific error code',
+      'Open certlm.msc → Personal → check for a valid RDS or Computer certificate',
+      'Run gpupdate /force to trigger auto-enrollment',
+      'Check auto-enrollment events: Application log → source Microsoft-Windows-CertificateServicesClient-AutoEnrollment',
+      'Manually bind a certificate via RDS MMC: Remote Desktop Session Host Configuration → Connections → RDP-Tcp → Properties → General',
+      'Check registry thumbprint: HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp\\SSLCertificateSHA1Hash'
+    ],
+    symptoms: [
+      'RDP certificate error',
+      'RDP certificate warning',
+      'RDP cannot create certificate',
+      'Remote Desktop TLS certificate error',
+      'RDP certificate expired',
+      'NLA failing certificate',
+      'RDS certificate binding error',
+      'Remote Desktop certificate invalid'
+    ],
+    tags: ['rdp', 'certificate', 'tls', 'rds', 'nla', 'security'],
+    powershell: `# RDS Certificate Investigation
+# Eventful
+
+# RDS certificate errors
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager'
+    Id           = @(1057, 1058)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Current RDS certificate binding (thumbprint in registry)
+$thumbprint = (Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp" -ErrorAction SilentlyContinue).SSLCertificateSHA1Hash
+if ($thumbprint) {
+    $cert = Get-ChildItem Cert:\LocalMachine\My | Where-Object { $_.Thumbprint -eq ($thumbprint | ForEach-Object { [System.BitConverter]::ToString([byte[]]$_) -replace '-','' }) }
+    if ($cert) { $cert | Select-Object Subject, NotAfter } else { "Thumbprint in registry not found in cert store" }
+} else { "No custom certificate configured — using auto-generated" }`,
+    related_ids: [21, 1149, 4625, 64],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/rds-tls-certificate-configuration'
+  },
+
+  {
+    id: 516,
+    source: 'TermServLicensing',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'RDS Licensing — Cannot Find License Server',
+    short_desc: 'RD Session Host cannot locate a Remote Desktop license server — grace period may be counting down.',
+    description: 'Event 516 from TermServLicensing is generated when the Remote Desktop Session Host cannot contact a configured Remote Desktop License Server. Without a license server, RDS runs in a grace period (120 days for Windows Server 2019+). After the grace period expires, users will be denied RDP connections. This is a critical infrastructure event for any RDS deployment serving more than 2 users.',
+    why_it_happens: 'The license server may be unreachable due to: it not being configured in Group Policy, the license server service being stopped, the RD Session Host pointing to the wrong license server name/IP, firewall blocking RPC traffic to the license server, or the license server not being activated.',
+    what_good_looks_like: 'No 516 events. RD Session Host can reach the license server. Licenses are available and being issued. Confirmed via: RD Licensing Diagnoser (lsdiag.msc) showing no errors.',
+    common_mistakes: [
+      'Not noticing Event 516 until users start getting denied — the grace period countdown is silent',
+      'Not configuring the license server via GPO — many admins set it only in RDS Server Manager which can be lost after a reboot',
+      'Forgetting that RD Licensing requires RPC (TCP 135 + dynamic ports) through firewalls between session host and license server'
+    ],
+    causes: [
+      'License server not configured in Group Policy or local RDS settings',
+      'License server offline or Remote Desktop Licensing service stopped',
+      'Firewall blocking RPC to license server',
+      'Wrong license server name or IP configured',
+      'License server not activated'
+    ],
+    steps: [
+      'Run lsdiag.msc (RD Licensing Diagnoser) on the session host for a guided check',
+      'Verify license server configuration: GPO → Computer Configuration → Administrative Templates → Windows Components → Remote Desktop Services → Remote Desktop Session Host → Licensing',
+      'Check connectivity to license server: Test-NetConnection -ComputerName <licServer> -Port 135',
+      'Check license server service: Get-Service TermServLicensing -ComputerName <licServer>',
+      'Check remaining grace period: in Event Viewer on session host look for 1128 (licenses available) or 1129 (grace period remaining)'
+    ],
+    symptoms: [
+      'RDS license server not found',
+      'Remote Desktop cannot find license server',
+      'RDS grace period',
+      'RDP license error',
+      'users denied remote desktop after 120 days',
+      'Remote Desktop licensing warning',
+      'TS licensing server not responding',
+      'RDS running in grace period'
+    ],
+    tags: ['rds', 'licensing', 'terminal-services', 'grace-period', 'rdp'],
+    powershell: `# RDS Licensing Status
+# Eventful
+
+# Licensing events on session host
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'TermServLicensing'
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending |
+    Select-Object -First 20 | Format-List
+
+# Check configured license server (from registry)
+$licMode  = (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -ErrorAction SilentlyContinue).LicensingMode
+$licServer = (Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\Terminal Services" -ErrorAction SilentlyContinue).LicenseServers
+"License Mode: $licMode\`nLicense Server: $licServer"`,
+    related_ids: [21, 41, 1057],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/rds-client-access-license'
+  },
+
+  {
+    id: 4005,
+    source: 'Microsoft-Windows-TerminalServices-RemoteConnectionManager',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'RDS — Maximum Connections Reached',
+    short_desc: 'Remote Desktop Session Host has reached the connection limit — new connections refused.',
+    description: 'Event 4005 is generated when the RD Session Host refuses a new connection because the maximum allowed number of sessions has been reached. Users attempting to connect will receive "Remote Desktop Services is currently busy" or "No more connections can be made to this remote computer" error messages. This is a capacity issue — either the server needs more capacity, zombie sessions need to be cleaned up, or users need to be redirected to another server.',
+    why_it_happens: 'RDS session limits are set by licensing (CAL count), by Session Limit Group Policy, or by Windows Server edition. Windows Server with Remote Desktop role supports unlimited users (with CALs), while Windows desktop OS supports only 1 concurrent RDP user. Zombie sessions (disconnected but not logged off) consume licenses and count against the limit.',
+    what_good_looks_like: 'Session count well below the licensed limit. Disconnected sessions cleaned up by idle timeout and disconnect timeout policies. Users prompted to log off rather than disconnect when done.',
+    common_mistakes: [
+      'Not configuring session idle and disconnect timeouts, causing zombie sessions to accumulate',
+      'Forgetting that disconnected sessions still count against the license and session limits',
+      'Not monitoring RDS session count proactively — 4005 is the emergency alert'
+    ],
+    causes: [
+      'Too many concurrent users for the server capacity',
+      'Disconnected zombie sessions consuming licenses',
+      'Session limit GPO set too low',
+      'License count insufficient for user count',
+      'Runaway processes creating multiple sessions per user'
+    ],
+    steps: [
+      'Check current sessions: query session /server:<hostname>',
+      'Identify and clean up zombie sessions: logoff <sessionId> /server:<hostname>',
+      'Configure session timeout GPOs: Computer Config → Admin Templates → Windows Components → RDS → Session Host → Session Time Limits',
+      'Check license availability via lsdiag.msc',
+      'Review server resource usage — if CPU/RAM is maxed, capacity expansion is needed'
+    ],
+    symptoms: [
+      'Remote Desktop connection refused',
+      'too many RDP connections',
+      'RDS maximum connections',
+      'cannot connect remote desktop busy',
+      'Remote Desktop full',
+      'RDP connection limit reached',
+      'no more remote desktop connections',
+      'RDS session limit exceeded'
+    ],
+    tags: ['rds', 'rdp', 'sessions', 'capacity', 'connections', 'limit'],
+    powershell: `# RDS Session Overview
+# Eventful
+
+$rdsh = $env:COMPUTERNAME  # Replace with RDS server name
+
+# Current sessions (all states)
+query session /server:$rdsh
+
+# Logoff a disconnected session by ID (uncomment and replace ID)
+# logoff <sessionId> /server:$rdsh
+
+# RDS connection refused events
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager'
+    Id           = 4005
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message | Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [21, 40, 41, 516],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/rds-plan-and-deploy'
+  },
+
+  {
+    id: 1067,
+    source: 'Microsoft-Windows-TerminalServices-RemoteConnectionManager',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Advanced',
+    title: 'RDS Session Host Could Not Register with Connection Broker',
+    short_desc: 'RD Session Host failed to register with the Remote Desktop Connection Broker — HA farm broken.',
+    description: 'Event 1067 is logged when an RD Session Host server in an RDS farm cannot register with the Remote Desktop Connection Broker (RDCB). Without successful registration, the session host does not receive new sessions from the broker, effectively removing it from the farm. Users connecting to the farm URL may experience "no servers available" or be routed only to the remaining healthy session hosts.',
+    why_it_happens: 'Connection Broker registration fails when the broker is offline, when there is a network/firewall issue between the session host and the broker, when the session host\'s computer account in the RDS SQL database is invalid, or when the RDCB service itself is having issues.',
+    what_good_looks_like: 'All RD Session Hosts registered and showing as Available in Server Manager → Remote Desktop Services. No 1067 events. Load is balanced across all session hosts in the farm.',
+    common_mistakes: [
+      'Not checking if the Connection Broker service (TSSDis) is running on the broker server',
+      'Firewall blocking TCP 3389/5504 between session hosts and the Connection Broker',
+      'Not re-adding the session host to the deployment after it was removed'
+    ],
+    causes: [
+      'RD Connection Broker service stopped on broker server',
+      'Firewall blocking communication between session host and broker',
+      'SQL Server database backing the broker is offline',
+      'Session host computer object invalid in the broker database',
+      'Network connectivity issue between farm members'
+    ],
+    steps: [
+      'Check RDCB service on broker: Get-Service TSSDis -ComputerName <brokerServer>',
+      'Test connectivity: Test-NetConnection -ComputerName <brokerServer> -Port 5504',
+      'Check SQL Server backing the RDCB is online',
+      'In Server Manager → Remote Desktop Services → check deployment health',
+      'Remove and re-add the session host to the deployment if registration is corrupt'
+    ],
+    symptoms: [
+      'RDS farm not load balancing',
+      'session host not accepting new connections',
+      'RD Connection Broker registration failed',
+      'RDS server not available in farm',
+      'users not routed to session host',
+      'RDS broker disconnected',
+      'Remote Desktop farm broken'
+    ],
+    tags: ['rds', 'connection-broker', 'farm', 'ha', 'registration'],
+    powershell: `# RDS Connection Broker Registration Events
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-TerminalServices-RemoteConnectionManager'
+    Id           = @(1067, 1068, 1069)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [21, 41, 1057],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/remote/remote-desktop-services/rds-roles'
   }
 ];

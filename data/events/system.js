@@ -2744,5 +2744,494 @@ Get-WinEvent -FilterHashtable @{
     Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
     related_ids: [19, 20],
     ms_docs: null
+  },
+
+  {
+    id: 36871,
+    source: 'Schannel',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Schannel — Fatal TLS/SSL Error',
+    short_desc: 'Schannel encountered a fatal error in the TLS/SSL handshake — connection failed.',
+    description: 'Event 36871 from Schannel (the Windows TLS implementation) indicates a fatal error occurred during a TLS handshake. Unlike 36882 (chain building failure), 36871 covers a broad range of handshake failures including protocol mismatch, cipher suite negotiation failure, and unexpected alert messages. The event message includes an error code that identifies the specific failure. Any HTTPS, LDAPS, SMTPS, or other TLS-protected connection that fails handshake generates this event on the receiving end.',
+    why_it_happens: 'TLS handshakes fail when the client and server cannot agree on a protocol version or cipher suite, when certificates are invalid or untrusted, when required extensions are missing, or when network disruption causes incomplete handshakes. Event 36871 is the catch-all for Schannel fatal errors.',
+    what_good_looks_like: 'No Schannel errors in System log. TLS connections negotiate TLS 1.2 or 1.3. Cipher suites are modern (AES-GCM, ChaCha20). Certificates are valid, trusted, and unexpired.',
+    common_mistakes: [
+      'Not checking the error code in the event — different codes point to different root causes',
+      'Fixing only the server side when the issue may be a client-side protocol restriction',
+      'Not verifying both client and server support the same TLS version and cipher suites'
+    ],
+    causes: [
+      'Protocol version mismatch — client requires TLS 1.2+ but server only offers 1.0/1.1',
+      'No common cipher suite between client and server',
+      'Certificate validation failure (expired, untrusted, wrong CN)',
+      'Network disruption causing TCP reset mid-handshake',
+      'Application sending unexpected data on a TLS socket'
+    ],
+    steps: [
+      'Note the error code from the event message',
+      'Test TLS connectivity: Test-NetConnection -ComputerName <server> -Port 443',
+      'Check TLS versions enabled on server: Get-TLSCipherSuite',
+      'Use TestSSL or openssl s_client to diagnose protocol/cipher negotiation',
+      'Check certificate validity on the service endpoint',
+      'Review IIS/application SSL binding if relevant'
+    ],
+    symptoms: [
+      'TLS handshake failed',
+      'SSL error connecting',
+      'HTTPS connection error',
+      'Schannel error',
+      'TLS connection failed',
+      'SSL handshake failed',
+      'cannot connect HTTPS',
+      'TLS fatal alert',
+      'secure connection failed'
+    ],
+    tags: ['tls', 'ssl', 'schannel', 'https', 'certificate', 'network'],
+    powershell: `# Schannel TLS Error Investigation
+# Eventful
+
+# All Schannel errors (36871, 36874, 36887, 36888)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Schannel'
+    Level        = @(1, 2)
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# Check enabled TLS cipher suites
+Get-TlsCipherSuite | Select-Object Name, Exchange, Cipher, Hash | Format-Table -AutoSize`,
+    related_ids: [36874, 36882, 36887, 36888],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/security/tls/schannel-security-support-provider-technical-reference'
+  },
+
+  {
+    id: 36874,
+    source: 'Schannel',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Schannel — TLS Connection Request Rejected (Protocol Not Supported)',
+    short_desc: 'TLS connection rejected because the client requested a protocol version the server does not support.',
+    description: 'Event 36874 is generated when Schannel rejects an incoming TLS connection because the client is using a TLS/SSL version that has been disabled on the server. This is common after hardening SSL/TLS settings — for example, disabling TLS 1.0/1.1 on Windows Server 2022 breaks legacy clients still using those versions. The event message identifies the rejected protocol version.',
+    why_it_happens: 'When Windows Server TLS hardening is applied (via Group Policy or IIS Crypto), older TLS versions are disabled. Clients — particularly legacy applications, old network printers, older Windows versions, and embedded devices — may only support the disabled versions. When they attempt to connect, Schannel rejects the handshake and logs 36874.',
+    what_good_looks_like: 'No 36874 events after TLS hardening. All clients support TLS 1.2+. Use TLS 1.2 for all connections.',
+    common_mistakes: [
+      'Disabling TLS 1.0/1.1 without first auditing what clients are using those protocols',
+      'Not checking the client-side — the client also needs TLS 1.2 enabled and .NET may need updating',
+      'Forgetting that LDAP over TLS (LDAPS port 636) can also be affected'
+    ],
+    causes: [
+      'Server disabled TLS 1.0 or TLS 1.1 but client only supports those versions',
+      'Old application hard-coded to use a specific SSL/TLS version',
+      'Legacy printer, scanner, or IoT device using old TLS',
+      'Client .NET Framework version does not support TLS 1.2 without registry fix',
+      'Client LDAPS connection using SSL 3.0 or TLS 1.0'
+    ],
+    steps: [
+      'Check if TLS hardening was recently applied on the server',
+      'Identify the client from Event 36874 message or network capture',
+      'Test which TLS versions the client supports using openssl or browser devtools',
+      'For Windows clients: enable TLS 1.2 in .NET and WinHTTP if not enabled',
+      'For legacy devices: evaluate if they can be updated or replaced',
+      'For applications: check vendor support for TLS 1.2 and update if available'
+    ],
+    symptoms: [
+      'TLS protocol not supported',
+      'SSL protocol mismatch',
+      'connection rejected after TLS hardening',
+      'legacy app cannot connect after update',
+      'printer not connecting after security update',
+      'TLS 1.0 disabled connection error',
+      'old application SSL error',
+      'LDAPS connection failing'
+    ],
+    tags: ['tls', 'ssl', 'schannel', 'protocol-mismatch', 'hardening', 'legacy'],
+    powershell: `# Check TLS versions enabled on Windows Server
+# Eventful
+
+# Check registry for enabled/disabled TLS protocol versions
+$protocols = @('SSL 2.0','SSL 3.0','TLS 1.0','TLS 1.1','TLS 1.2','TLS 1.3')
+foreach ($proto in $protocols) {
+    $path = "HKLM:\SYSTEM\CurrentControlSet\Control\SecurityProviders\SCHANNEL\Protocols\$proto\Server"
+    $enabled = if (Test-Path $path) {
+        (Get-ItemProperty $path -ErrorAction SilentlyContinue).Enabled
+    } else { 'not set (default)' }
+    [PSCustomObject]@{ Protocol = $proto; ServerEnabled = $enabled }
+} | Format-Table -AutoSize`,
+    related_ids: [36871, 36887, 36888],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/security/tls/tls-registry-settings'
+  },
+
+  {
+    id: 36887,
+    source: 'Schannel',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Schannel — Fatal Alert Received from Remote',
+    short_desc: 'The remote party sent a TLS fatal alert, terminating the connection.',
+    description: 'Event 36887 is logged when the remote server or client sent a TLS fatal alert code, which causes the TLS connection to terminate immediately. The event includes the alert code — common codes include 40 (handshake failure), 42 (bad certificate), 44 (certificate revoked), 45 (certificate expired), 46 (certificate unknown), 48 (unknown CA). This indicates the remote side rejected the local certificate or handshake parameters.',
+    why_it_happens: 'The remote party rejects the TLS handshake when the presented certificate fails validation, the CA is not trusted, the certificate is revoked, or the cipher suites do not match. Alert code 40 (handshake_failure) is the most common and can mean many things; alert code 45 (certificate_expired) specifically means the local certificate presented to the remote is expired.',
+    what_good_looks_like: 'No 36887 events. Local certificates are valid, trusted by remote parties, and renewed before expiry.',
+    common_mistakes: [
+      'Looking only at the local server for the problem when 36887 means the REMOTE party rejected this server',
+      'Not reading the alert code — it narrows down the failure category significantly',
+      'Not checking if the service\'s bound certificate has expired (alert 45 = certificate_expired)'
+    ],
+    causes: [
+      'Local service certificate expired — remote client rejects it',
+      'Local certificate CA not trusted by the remote party',
+      'Certificate CN/SAN does not match the hostname being connected to',
+      'Certificate revoked and remote performs CRL check',
+      'Cipher suite mismatch (alert 40 = handshake_failure)',
+      'Mutual TLS required but local certificate is wrong type'
+    ],
+    steps: [
+      'Note the alert code from the event message',
+      'Alert 45: local certificate expired — check certlm.msc for the service binding',
+      'Alert 42/44/46: certificate issue — verify local cert is valid, trusted, and correctly bound',
+      'Alert 40: cipher mismatch — compare cipher suites with the remote party',
+      'Check IIS/service certificate binding if this is a web server',
+      'Run: certutil -verify -urlfetch <certfile> on the local certificate'
+    ],
+    symptoms: [
+      'TLS fatal alert received',
+      'certificate rejected by remote',
+      'TLS handshake failure alert',
+      'remote rejected certificate',
+      'TLS connection dropped by remote',
+      'certificate error connecting to remote',
+      'SSL alert code 40',
+      'SSL alert code 45 certificate expired'
+    ],
+    tags: ['tls', 'ssl', 'schannel', 'certificate', 'alert', 'handshake'],
+    powershell: `# Schannel Fatal Alert Investigation
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Schannel'
+    Id           = 36887
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Check local machine certificate expiry (service binding)
+Get-ChildItem Cert:\LocalMachine\My |
+    Select-Object Subject, NotAfter, Thumbprint,
+        @{N='DaysLeft'; E={ [int](($_.NotAfter - (Get-Date)).TotalDays) }} |
+    Sort-Object DaysLeft | Format-Table -AutoSize`,
+    related_ids: [36871, 36874, 36888, 36882],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/security/tls/schannel-security-support-provider-technical-reference'
+  },
+
+  {
+    id: 36888,
+    source: 'Schannel',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Schannel — Fatal Alert Generated (Sent to Remote)',
+    short_desc: 'Schannel generated and sent a TLS fatal alert to the remote — this system rejected the connection.',
+    description: 'Event 36888 is the mirror of 36887 — it is logged when this system (not the remote party) sends a TLS fatal alert and terminates the handshake. This means the local Schannel rejected the remote party\'s certificate or TLS parameters. Alert codes are the same as 36887 but now this is the local system doing the rejecting. Common cause: the remote server\'s certificate is not trusted by the local machine\'s certificate store.',
+    why_it_happens: 'Schannel sends fatal alerts when it cannot validate the remote party\'s certificate, when the certificate chain cannot be built, when the CRL is unavailable and hard-fail CRL checking is configured, or when the protocol or cipher suite is unacceptable.',
+    what_good_looks_like: 'No 36888 events. All servers this machine connects to have valid, trusted certificates.',
+    common_mistakes: [
+      'Confusing 36887 (remote rejected us) with 36888 (we rejected remote) — the direction of the alert matters for troubleshooting',
+      'Not checking if the remote server\'s root CA is in the local Trusted Root store',
+      'Hard-fail CRL checking enabled but CRL is temporarily unreachable, causing false rejections'
+    ],
+    causes: [
+      'Remote server\'s certificate is not trusted (unknown CA)',
+      'Remote server\'s certificate has expired',
+      'CRL checking required but CRL is offline',
+      'Remote server\'s certificate CN/SAN does not match hostname',
+      'Hard-fail CRL checking failing due to network issue'
+    ],
+    steps: [
+      'Identify the remote server from application logs or network captures',
+      'Test certificate of remote server: certutil -verify -urlfetch <serverName>',
+      'Check if remote CA root is in Trusted Root store: certlm.msc → Trusted Root CAs',
+      'Check CRL reachability from this machine',
+      'If CRL is causing false failures: check WinHTTP proxy settings for CRL fetch'
+    ],
+    symptoms: [
+      'this server rejecting remote certificate',
+      'TLS alert sent to remote',
+      'server not trusted by local',
+      'certificate chain not trusted',
+      'TLS rejected remote connection',
+      'Schannel generated fatal alert',
+      'application cannot connect TLS rejected'
+    ],
+    tags: ['tls', 'ssl', 'schannel', 'certificate', 'trust', 'crl'],
+    powershell: `# Schannel Generated Alert Investigation
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Schannel'
+    Id           = 36888
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Check trusted root CAs (to verify if remote CA is trusted)
+Get-ChildItem Cert:\LocalMachine\Root |
+    Select-Object Subject, NotAfter |
+    Sort-Object Subject | Format-Table -AutoSize`,
+    related_ids: [36871, 36874, 36887, 36882],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/security/tls/schannel-security-support-provider-technical-reference'
+  },
+
+  {
+    id: 7022,
+    source: 'Service Control Manager',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Service Hung on Start',
+    short_desc: 'A service did not respond to the start request within the timeout period.',
+    description: 'Event 7022 is logged by the Service Control Manager when a service was sent the "start" command but did not transition to the Running state within the service start timeout (typically 30 seconds). The service is likely still starting or is stuck — it has not crashed, but it has not confirmed successful startup either. This is often seen with services that have long initialization (database validation, large cache warm-up) or are stuck on a dependency that is not available.',
+    why_it_happens: 'Services must notify SCM that they have started successfully within a timeout window. Services that perform heavy initialization work, wait for network resources, or have dependency deadlocks may exceed this window. The service may still eventually start, or it may be stuck indefinitely waiting for an external resource.',
+    what_good_looks_like: 'Services start and report running within 30 seconds. No 7022 events. System startup completes without hung services delaying boot.',
+    common_mistakes: [
+      'Assuming the service is fully stopped when 7022 appears — it may still be running or in a starting state',
+      'Not checking the service\'s dependencies — a hung service often means a dependency (e.g., SQL Server, Active Directory) is unavailable',
+      'Not reviewing the Application log for errors from the service around the same time'
+    ],
+    causes: [
+      'Service waiting for a dependent resource (database, network share, AD) that is offline',
+      'Service performing heavy initialization (large data import, cache warm-up)',
+      'Deadlock in service startup code',
+      'Service waiting on user input or interactive desktop',
+      'System under extreme resource pressure at startup'
+    ],
+    steps: [
+      'Check the service status: Get-Service <ServiceName>',
+      'Check service dependencies: Get-Service <ServiceName> | Select-Object -ExpandProperty ServicesDependedOn',
+      'Review Application log for errors from the service',
+      'Check System log for 7001 (dependency failed) around the same time',
+      'If service is stuck: Stop-Service -Force <ServiceName>, investigate, restart',
+      'Increase service start timeout if initialization legitimately takes longer: HKLM\\SYSTEM\\CurrentControlSet\\Control → ServicesPipeTimeout (ms)'
+    ],
+    symptoms: [
+      'service hung on start',
+      'service not starting',
+      'service stuck starting',
+      'service timeout on start',
+      'service not responding to start',
+      'service slow to start',
+      'service start hung'
+    ],
+    tags: ['service', 'startup', 'timeout', 'scm', 'hung', 'boot'],
+    powershell: `# Service Start Hung Investigation
+# Eventful
+
+# Recent service hung events
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Service Control Manager'
+    Id           = @(7022, 7023)
+    StartTime    = (Get-Date).AddDays(-1)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Check services currently not running (may still be hung)
+Get-Service | Where-Object { $_.Status -ne 'Running' -and $_.StartType -eq 'Automatic' } |
+    Select-Object Name, Status, StartType | Format-Table -AutoSize`,
+    related_ids: [7001, 7023, 7034],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/services/service-control-manager'
+  },
+
+  {
+    id: 7043,
+    source: 'Service Control Manager',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Service Did Not Respond to Control Request',
+    short_desc: 'SCM sent a stop/pause control to a service but the service did not respond in time.',
+    description: 'Event 7043 is logged when the Service Control Manager sends a stop, pause, or other control request to a service and the service does not acknowledge it within the control timeout. The service is not cooperating with the shutdown request. This causes system shutdown to hang waiting for the service, and may cause data corruption if the service was mid-transaction when the stop was requested.',
+    why_it_happens: 'Services that receive a STOP control must finish in-progress work and signal SCM within the timeout. Services stuck on long-running database commits, network operations, or those that have deadlocked will fail to respond. This is especially problematic during Windows Updates and system shutdowns.',
+    what_good_looks_like: 'Services stop cleanly within a few seconds of receiving a STOP control. No 7043 events during normal shutdowns.',
+    common_mistakes: [
+      'Not investigating why the service was not stopping — it usually means it was stuck on an operation',
+      'Using -Force on Stop-Service without understanding why it\'s not stopping — this can cause data loss'
+    ],
+    causes: [
+      'Service stuck waiting on a network operation at shutdown time',
+      'Deadlock in service code during cleanup',
+      'Service waiting on a database commit that cannot complete',
+      'Service not properly handling SERVICE_STOP control message'
+    ],
+    steps: [
+      'Check Application log for errors from the service around the stop time',
+      'Use Task Manager or Process Monitor to see what the service process was doing',
+      'Check for associated database or file handle holds',
+      'Review service vendor documentation for known shutdown issues',
+      'If recurring: consider increasing the service shutdown timeout in registry'
+    ],
+    symptoms: [
+      'service not stopping',
+      'service not responding to stop',
+      'shutdown taking too long',
+      'service hung on stop',
+      'service stop timeout',
+      'Windows update hanging on service',
+      'system shutdown slow service'
+    ],
+    tags: ['service', 'shutdown', 'timeout', 'scm', 'stop', 'hung'],
+    powershell: `# Service Stop Timeout Investigation
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Service Control Manager'
+    Id           = 7043
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message | Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [7022, 7034, 7031],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/services/service-control-manager'
+  },
+
+  {
+    id: 5719,
+    source: 'NETLOGON',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Netlogon — No Domain Controller Available for Secure Channel',
+    short_desc: 'The computer cannot establish a secure channel with any domain controller — domain connectivity broken.',
+    description: 'Event 5719 from NETLOGON is generated when a Windows computer cannot establish a secure channel with any domain controller. The secure channel is used for authentication pass-through, Group Policy, SYSVOL access, and password changes. When 5719 is present, the computer is effectively disconnected from the domain — users may log in with cached credentials, Group Policy will not apply, and domain-authenticated services may fail. This event is one of the most important indicators of domain connectivity problems.',
+    why_it_happens: 'Secure channel establishment fails when no DC can be reached (DNS failure, network issue), when the computer account password has become out of sync with Active Directory (machine account password issue), or when the secure channel is broken. Symptoms include: "trust relationship between this workstation and the primary domain failed" error, users unable to log in with domain credentials, and Group Policy not applying.',
+    what_good_looks_like: 'No 5719 events. The machine can reach a DC: nltest /dsgetdc:<domain> returns a DC. Net logon service running and secure channel verified: nltest /sc_verify:<domain>.',
+    common_mistakes: [
+      'Assuming the machine account password is the problem without first checking DNS and network connectivity to DCs',
+      'Rejoining the domain as the first troubleshooting step — this is the nuclear option; try resetting the secure channel first',
+      'Not checking if DNS can resolve the domain name — 5719 is often caused by DNS failure, not account issues'
+    ],
+    causes: [
+      'No domain controller reachable — DNS failure or network connectivity issue',
+      'Machine account password is out of sync with Active Directory',
+      'Computer object deleted or disabled in AD',
+      'Firewall blocking Kerberos/LDAP ports to domain controllers',
+      'Time skew > 5 minutes between workstation and DC (Kerberos requires time sync)'
+    ],
+    steps: [
+      'Check DNS: Resolve-DnsName <domain.fqdn> — must return DC IPs',
+      'Check DC connectivity: Test-NetConnection -ComputerName <dcName> -Port 88 (Kerberos)',
+      'Verify time sync: w32tm /query /status — skew must be < 5 minutes',
+      'Test secure channel: nltest /sc_verify:<domain>',
+      'Reset secure channel if broken: Reset-ComputerMachinePassword -Credential (Get-Credential)',
+      'If computer object deleted: rejoin the domain (last resort)',
+      'Check 5720 event — "computer account password changed" — to correlate with sync issues'
+    ],
+    symptoms: [
+      'trust relationship failed',
+      'domain not available',
+      'cannot log in with domain account',
+      'this computer trust relationship has failed',
+      'domain controller not available',
+      'secure channel broken',
+      'domain disconnected',
+      'workstation domain trust failed',
+      'cannot contact domain controller',
+      'group policy not applying domain'
+    ],
+    tags: ['domain', 'netlogon', 'secure-channel', 'active-directory', 'trust', 'authentication'],
+    powershell: `# Netlogon Secure Channel Diagnostics
+# Eventful
+
+# Recent Netlogon errors
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'NETLOGON'
+    Id           = @(5719, 5805, 5722)
+    StartTime    = (Get-Date).AddDays(-1)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Test secure channel (run on the affected machine)
+nltest /sc_verify:$env:USERDNSDOMAIN
+
+# Find nearest DC
+nltest /dsgetdc:$env:USERDNSDOMAIN
+
+# Check time sync
+w32tm /query /status`,
+    related_ids: [5720, 7023, 4625],
+    ms_docs: 'https://learn.microsoft.com/en-us/troubleshoot/windows-server/active-directory/how-domain-controllers-are-located'
+  },
+
+  {
+    id: 219,
+    source: 'Microsoft-Windows-Kernel-PnP',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'PnP Driver Installation Failed',
+    short_desc: 'Windows could not install or load a driver for a device — device may not function.',
+    description: 'Event 219 from Microsoft-Windows-Kernel-PnP is logged when Windows Plug and Play cannot find, install, or load an appropriate driver for a device. The device will appear in Device Manager with a yellow exclamation mark (error code 28 = no drivers, code 43 = driver error, code 10 = cannot start). This affects hardware devices including network adapters, storage controllers, USB devices, and printers — any of which can cause significant functionality problems if the correct driver is missing.',
+    why_it_happens: 'Driver installation failures occur when the correct driver is not present in the Windows driver store, when a driver update corrupts or replaces a working driver, when the device vendor\'s driver is not compatible with the OS version, or when Windows Update delivers an incompatible driver.',
+    what_good_looks_like: 'No Event 219 in System log. Device Manager shows all devices working properly (no yellow exclamation marks). All hardware detected and functional after OS install or update.',
+    common_mistakes: [
+      'Using Device Manager without checking Event 219 for the specific error code that explains why the driver failed',
+      'Not checking Windows Update history — a driver delivered via Windows Update may have replaced a working vendor driver',
+      'Downloading drivers from unofficial sites instead of the vendor\'s website'
+    ],
+    causes: [
+      'Driver not present in Windows driver store for this hardware',
+      'Wrong or incompatible driver installed',
+      'Windows Update delivered incorrect driver',
+      'Driver files corrupted',
+      'Hardware device failing — driver loads but device returns error to driver',
+      '32-bit driver on 64-bit OS or vice versa'
+    ],
+    steps: [
+      'Open Device Manager (devmgmt.msc) — look for yellow exclamation marks',
+      'Right-click the device → Properties → note the error code',
+      'Check Event 219 in System log for the device instance path',
+      'Download the correct driver from the hardware vendor\'s website',
+      'If Windows Update installed a bad driver: Device Manager → driver → Update Driver → Browse My Computer → Let me pick → choose older version',
+      'Run: pnputil /add-driver <inffile> /install if installing manually',
+      'Run sfc /scannow if driver files may be corrupted'
+    ],
+    symptoms: [
+      'device not working',
+      'driver installation failed',
+      'yellow exclamation in device manager',
+      'hardware not detected',
+      'network adapter not working after update',
+      'printer driver error',
+      'USB device not recognized driver',
+      'device driver error',
+      'cannot install driver',
+      'driver failed to load'
+    ],
+    tags: ['driver', 'pnp', 'hardware', 'device-manager', 'installation'],
+    powershell: `# PnP Driver Failure Investigation
+# Eventful
+
+# Recent driver installation failures
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-PnP'
+    Id           = 219
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Devices with errors in Device Manager
+Get-PnpDevice -PresentOnly |
+    Where-Object { $_.Status -ne 'OK' } |
+    Select-Object FriendlyName, Class, Status, ProblemCode | Format-Table -AutoSize`,
+    related_ids: [7026, 1001],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-hardware/drivers/install/device-manager-error-messages'
   }
 ];

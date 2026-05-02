@@ -589,5 +589,189 @@ Get-NetTCPConnection -State Established |
     Format-Table -AutoSize`,
     related_ids: [4688, 4624],
     ms_docs: null
+  },
+
+  {
+    id: 4201,
+    source: 'Microsoft-Windows-NDIS',
+    channel: 'System',
+    severity: 'Info',
+    skill_level: 'Fundamental',
+    title: 'Network Adapter Connected',
+    short_desc: 'A network adapter transitioned to a connected state — cable plugged in or wireless associated.',
+    description: 'Event 4201 from Microsoft-Windows-NDIS (Network Driver Interface Specification) is generated when a network adapter reports that its link state has changed to connected. This includes physical cable connections, Wi-Fi associations, and virtual NIC link changes. Pairing 4201 (connect) with 4202 (disconnect) gives a timeline of NIC link flaps, which are often the root cause of intermittent network problems, brief outages, or VPN drops.',
+    why_it_happens: 'Link state changes are physical events reported by the network adapter driver. A 4201 event happens when a cable is plugged in, when the switch port comes up, or when a wireless client successfully associates. Normal startup causes 4201; intermittent 4201/4202 pairs during normal operation indicate a physical layer problem.',
+    what_good_looks_like: 'Single 4201 event at system boot/startup. No further 4201/4202 pairs during normal operation. NIC drivers are current and NIC hardware is healthy.',
+    common_mistakes: [
+      'Not correlating 4201/4202 pairs when investigating intermittent network outages — link flapping is often the root cause',
+      'Not checking the cable or switch port when 4201/4202 events show repeated link flaps'
+    ],
+    causes: [
+      'Normal system startup — NIC initializing',
+      'Cable plugged in or switch port brought up',
+      'Wireless client associating with access point',
+      'Virtual switch or virtual NIC coming online',
+      'Recovery after a link flap — often paired with 4202 just before'
+    ],
+    steps: [
+      'Check for paired 4201/4202 events — repeated pairs indicate link flapping',
+      'If flapping: inspect the cable, RJ45 connector, and switch port',
+      'Update NIC driver from vendor website',
+      'Check switch port statistics for errors on the port',
+      'Test with a known-good cable if physical connection is suspected'
+    ],
+    symptoms: [
+      'network adapter connected',
+      'network cable plugged in',
+      'NIC link state changed',
+      'network link up',
+      'intermittent network drops',
+      'network connection flapping',
+      'NIC keeps connecting disconnecting'
+    ],
+    tags: ['network', 'ndis', 'nic', 'link-state', 'connectivity'],
+    powershell: `# Network Adapter Link State History
+# Eventful
+
+# NIC connect/disconnect events
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-NDIS'
+    Id           = @(4201, 4202)
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id,
+        @{N='Event'; E={ if ($_.Id -eq 4201) {'CONNECTED'} else {'DISCONNECTED'} }},
+        Message |
+    Sort-Object TimeCreated | Format-Table -AutoSize`,
+    related_ids: [4202, 10317],
+    ms_docs: null
+  },
+
+  {
+    id: 4202,
+    source: 'Microsoft-Windows-NDIS',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Fundamental',
+    title: 'Network Adapter Disconnected',
+    short_desc: 'A network adapter lost its link — cable unplugged, switch port down, or wireless disassociated.',
+    description: 'Event 4202 is the disconnection counterpart to 4201. It is generated when a network adapter reports its link state has changed to disconnected. This includes physical cable disconnections, switch port going down, wireless disassociation, or driver/power management suspending the NIC. A single 4202 at system shutdown or sleep is normal; repeated 4202 events during operation indicate a physical or driver problem.',
+    why_it_happens: 'Link disconnection can be physical (cable fail, bad connector, switch port issue) or logical (driver crash, power management turning off NIC, wireless roaming event). When VPN or network-dependent services drop intermittently, 4202 events are the smoking gun showing the NIC itself dropped connection.',
+    what_good_looks_like: 'Only one 4202 event at system shutdown or sleep. No 4202 events during normal operation.',
+    common_mistakes: [
+      'Not checking NIC power management settings — "Allow the computer to turn off this device to save power" is a common cause of random NIC disconnects',
+      'Not checking the switch/access point side for errors — the NIC may be reporting disconnect because the switch port is flapping'
+    ],
+    causes: [
+      'Cable disconnected or loose connector',
+      'Switch port going down or flapping',
+      'NIC driver crash causing virtual disconnect',
+      'Power management turning off NIC to save power',
+      'Wireless client disassociating or roaming to another AP',
+      'System suspending (sleep/hibernate)'
+    ],
+    steps: [
+      'Check for repeated 4201/4202 pairs — repeated = link flapping',
+      'Disable NIC power management: Device Manager → NIC → Properties → Power Management → uncheck "Allow computer to turn off this device to save power"',
+      'Inspect cable and connectors; test with known-good cable',
+      'Check switch port counters for errors',
+      'Update NIC driver',
+      'If wireless: check signal strength and roaming aggressiveness settings'
+    ],
+    symptoms: [
+      'network disconnected',
+      'NIC disconnected',
+      'network adapter link dropped',
+      'intermittent network loss',
+      'network drops out randomly',
+      'cable unplugged event',
+      'network keeps disconnecting',
+      'connection drops then reconnects',
+      'NIC link lost'
+    ],
+    tags: ['network', 'ndis', 'nic', 'link-state', 'disconnect', 'connectivity'],
+    powershell: `# NIC Disconnect History and Power Management Check
+# Eventful
+
+# Link state events in the last 24 hours
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-NDIS'
+    Id           = @(4201, 4202)
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id,
+        @{N='Event'; E={ if ($_.Id -eq 4201) {'CONNECTED'} else {'DISCONNECTED'} }} |
+    Sort-Object TimeCreated | Format-Table -AutoSize
+
+# Check NIC power management setting (if PnP device = NIC)
+Get-NetAdapter | ForEach-Object {
+    $adapterName = $_.Name
+    [PSCustomObject]@{
+        Adapter      = $adapterName
+        Status       = $_.Status
+        LinkSpeed    = $_.LinkSpeed
+    }
+} | Format-Table -AutoSize`,
+    related_ids: [4201, 10317, 10400],
+    ms_docs: null
+  },
+
+  {
+    id: 4199,
+    source: 'Tcpip',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Fundamental',
+    title: 'IP Address Conflict Detected',
+    short_desc: 'Two devices on the network are using the same IP address — one or both will lose connectivity.',
+    description: 'Event 4199 (or similar Tcpip events for IP conflict) is generated when the Windows TCP/IP stack detects that another device on the network is using the same IP address as this computer. This causes intermittent connectivity loss as the network switches route traffic to one device or the other. The event identifies the conflicting MAC address, which can be used to track down the other device.',
+    why_it_happens: 'IP conflicts occur when: a static IP is assigned to a device that is already being used by another device, a DHCP lease is not properly expired when a device is decommissioned and the same IP is later assigned to a new device, or a DHCP server gives out overlapping addresses due to misconfiguration.',
+    what_good_looks_like: 'No IP conflict events. All static IPs documented and excluded from DHCP scopes. DHCP lease times appropriate so expired leases are reclaimed before reuse.',
+    common_mistakes: [
+      'Not documenting static IP assignments, leading to overlaps with DHCP scope',
+      'Not adding static IPs as exclusions in the DHCP scope'
+    ],
+    causes: [
+      'Static IP assigned to a device that is already in the DHCP pool and has been leased to another device',
+      'Two devices manually configured with the same static IP',
+      'DHCP server giving out an address that is already statically assigned',
+      'Decommissioned device\'s IP reused before the lease expired on another machine'
+    ],
+    steps: [
+      'Note the conflicting MAC address from the event',
+      'Use arp -a to find the device currently holding that IP',
+      'Identify the conflicting device from its MAC address using the network switch MAC table or DHCP server',
+      'Resolve: either change the static IP, add an exclusion in DHCP, or reclaim the DHCP lease',
+      'ipconfig /release && ipconfig /renew to get a new IP on the affected machine'
+    ],
+    symptoms: [
+      'IP address conflict',
+      'duplicate IP address',
+      'two computers same IP',
+      'network conflict IP',
+      'intermittent network due to IP conflict',
+      'address already in use',
+      'IP conflict detected',
+      'DHCP IP conflict'
+    ],
+    tags: ['network', 'ip', 'conflict', 'dhcp', 'tcp-ip'],
+    powershell: `# IP Conflict Detection
+# Eventful
+
+# IP conflict events in System log
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Tcpip'
+    Id           = @(4199, 4198)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending | Format-List
+
+# Current ARP cache (find conflicting MAC)
+arp -a`,
+    related_ids: [1020, 4201],
+    ms_docs: null
   }
 ];

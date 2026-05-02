@@ -510,5 +510,294 @@ Get-WinEvent -FilterHashtable @{
 # msiexec /i "C:\path\to\package.msi" /l*v "C:\install-log.txt"`,
     related_ids: [1033, 1000],
     ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/msi/windows-installer-error-messages'
+  },
+
+  {
+    id: 11724,
+    source: 'MsiInstaller',
+    channel: 'Application',
+    severity: 'Info',
+    skill_level: 'Fundamental',
+    title: 'MSI Product Successfully Removed',
+    short_desc: 'Windows Installer completed an uninstall — records the product name and version.',
+    description: 'Event 11724 from MsiInstaller is logged when a software product is successfully uninstalled via Windows Installer. It records the product name, version, and optionally the user account that performed the uninstall. This event is useful for software audit trails, detecting unauthorized software removal, compliance tracking, and troubleshooting issues caused by accidental uninstallation.',
+    why_it_happens: 'Generated whenever Windows Installer completes a product removal, regardless of whether it was initiated by a user, an automated script, Group Policy software removal, or a silent uninstall via command line. Paired with Event 1034 (product removed in progress) and 1035 (reconfiguration).',
+    what_good_looks_like: 'Uninstall events during authorized change windows. Business-critical software not being removed outside of maintenance windows.',
+    common_mistakes: [
+      'Not checking who performed the uninstall — the Subject field identifies the user account',
+      'Not correlating with SCCM/Intune deployment logs if automated removal was expected'
+    ],
+    causes: [
+      'User uninstalled software from Control Panel',
+      'Automated deployment system removed software',
+      'Group Policy software removal applied',
+      'IT admin silently uninstalled via msiexec',
+      'Software conflicted with another product and was auto-removed'
+    ],
+    steps: [
+      'Filter Application log for Event 11724',
+      'Note the product name and version — was this expected?',
+      'Check Windows Installer verbose log if available: %TEMP%\\MSI*.log',
+      'Correlate with SCCM, Intune, or PDQ Deploy deployment history',
+      'If unauthorized: check Event 4688 (process create) for msiexec around the same time'
+    ],
+    symptoms: [
+      'software uninstalled',
+      'application removed',
+      'who uninstalled software',
+      'software gone missing',
+      'application disappeared',
+      'software audit uninstall',
+      'unauthorized software removal',
+      'program removed from PC'
+    ],
+    tags: ['msi', 'uninstall', 'software', 'audit', 'installer'],
+    powershell: `# Software Uninstall History
+# Eventful
+
+# Recent software removals
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'MsiInstaller'
+    Id           = @(11724, 1034)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [11707, 1033, 1034],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/msi/windows-installer-portal'
+  },
+
+  {
+    id: 455,
+    source: 'ESENT',
+    channel: 'Application',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'ESENT Database File Error',
+    short_desc: 'ESENT (Extensible Storage Engine) could not open or access a database file.',
+    description: 'Event 455 from ESENT is logged when the Extensible Storage Engine (used by Active Directory, Windows Update, Windows Search, Group Policy, and many other Windows components) encounters an error accessing its database file. The event includes the process name, database path, and an error code. Common errors: -1023 (file not found), -1811 (disk full), -510 (database is corrupted). ESENT database corruption can cause AD issues, Windows Update failures, and search index problems.',
+    why_it_happens: 'ESENT database errors occur when database files are corrupt (often after an unclean shutdown or disk failure), when the disk runs out of space preventing log file writes, when database files are moved or renamed while the service is running, or when access permissions on the database directory have changed.',
+    what_good_looks_like: 'No ESENT errors in Application log. Windows Update, AD replication, and Windows Search all functioning normally. Adequate disk space on system drive.',
+    common_mistakes: [
+      'Ignoring ESENT errors because they seem low-level — they can indicate serious corruption in Windows Update or AD database',
+      'Not noting the process name in the event — svchost.exe hosting Windows Update has different implications than lsass.exe (AD)',
+      'Not checking disk space first — many ESENT errors are simply caused by full disk'
+    ],
+    causes: [
+      'Database file corrupted by unclean shutdown or disk error',
+      'Disk full — ESENT cannot write transaction log files',
+      'Database files moved while service was running',
+      'Permissions changed on database directory',
+      'Hard disk failure causing I/O errors on database files'
+    ],
+    steps: [
+      'Check disk space: Get-PSDrive C | Select-Object Used, Free',
+      'Identify the process from the event: svchost = likely Windows Update or Search; lsass = AD',
+      'For Windows Update ESENT errors: stop Windows Update, delete %WINDIR%\\SoftwareDistribution, restart service',
+      'For Windows Search: rebuild search index — Control Panel → Indexing Options → Advanced → Rebuild',
+      'For AD (ntds.dit): this is critical — follow AD database recovery procedures with ntdsutil',
+      'Run: chkdsk /f on the affected volume if disk errors are suspected'
+    ],
+    symptoms: [
+      'ESENT database error',
+      'Windows Update database corrupt',
+      'Windows Search index error',
+      'Windows Update not working ESENT',
+      'search not working database error',
+      'ESENT error application log',
+      'database file error Windows'
+    ],
+    tags: ['esent', 'database', 'corruption', 'windows-update', 'search', 'active-directory'],
+    powershell: `# ESENT Error Investigation
+# Eventful
+
+# Recent ESENT errors
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'ESENT'
+    Id           = @(455, 508, 490)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message | Sort-Object TimeCreated -Descending |
+    Select-Object -First 10 | Format-List
+
+# Check disk space
+Get-PSDrive C | Select-Object Name, Used, Free, @{N='FreeGB'; E={[math]::Round($_.Free/1GB,1)}}`,
+    related_ids: [508, 1000],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/extensible-storage-engine/extensible-storage-engine-reference'
+  },
+
+  {
+    id: 8004,
+    source: 'Microsoft-Windows-AppLocker',
+    channel: 'Microsoft-Windows-AppLocker/EXE and DLL',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'AppLocker Blocked Executable',
+    short_desc: 'AppLocker blocked an executable (.exe or .dll) from running — policy enforcement.',
+    description: 'Event 8004 from AppLocker is generated when an executable (.exe) or DLL is blocked from running because it does not match any Allow rule in the active AppLocker policy. This event is logged in the "Microsoft-Windows-AppLocker/EXE and DLL" operational log. It captures the user, the blocked file path, the publisher information, and the file hash. AppLocker 8004 events indicate a policy enforcement action — software that should be allowed needs a new rule, or unauthorized software is being blocked as intended.',
+    why_it_happens: 'AppLocker enforces application whitelisting. Any executable that does not match a configured Allow rule is blocked with Event 8004. This occurs when a user tries to run unapproved software, when approved software is updated and the new path or hash no longer matches the rule, or when a new application is deployed without first creating an AppLocker rule for it.',
+    what_good_looks_like: 'AppLocker in Audit mode (8003 events) before enforcement. After enforcement: 8004 events only for genuinely unauthorized applications. No 8004 events for business-critical applications.',
+    common_mistakes: [
+      'Deploying AppLocker in enforcement mode without first running in audit mode to identify what will be blocked',
+      'Not updating AppLocker rules when approved software is updated and path/hash changes',
+      'Forgetting that DLL rules (which can block core components) require careful testing before enforcement'
+    ],
+    causes: [
+      'User attempting to run unauthorized or unapproved software',
+      'Approved software path changed after update and rule no longer matches',
+      'Application deployed without AppLocker rule being created first',
+      'Script or macro attempting to launch an executable not in the whitelist',
+      'Malware or attacker tool blocked by AppLocker'
+    ],
+    steps: [
+      'Open Event Viewer → Applications and Services Logs → Microsoft → Windows → AppLocker → EXE and DLL',
+      'Filter for Event 8004',
+      'Note the File Path and Publisher — is this an authorized application that needs a rule?',
+      'If authorized: create an AppLocker rule — publisher rule preferred over path/hash',
+      'If unauthorized: confirm AppLocker is working as intended',
+      'Use Get-AppLockerPolicy -Effective to review current rules'
+    ],
+    symptoms: [
+      'application blocked by AppLocker',
+      'program blocked from running',
+      'AppLocker blocking software',
+      'application whitelist blocking',
+      'exe blocked policy',
+      'cannot run application AppLocker',
+      'AppLocker rule missing',
+      'application blocked enterprise policy'
+    ],
+    tags: ['applocker', 'application-whitelisting', 'security', 'policy', 'exe', 'block'],
+    powershell: `# AppLocker Block Events
+# Eventful
+
+# EXE/DLL blocks (8004) and audit (8003)
+Get-WinEvent -LogName 'Microsoft-Windows-AppLocker/EXE and DLL' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Id -in @(8003, 8004) -and $_.TimeCreated -gt (Get-Date).AddDays(-7) } |
+    Select-Object TimeCreated, Id,
+        @{N='Result'; E={ if ($_.Id -eq 8004) {'BLOCKED'} else {'AUDIT-BLOCK'} }},
+        Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# Current effective AppLocker policy
+Get-AppLockerPolicy -Effective | Test-AppLockerPolicy -Path "C:\Windows\System32\cmd.exe" -User Everyone`,
+    related_ids: [8003, 8006, 8007],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-defender-application-control/applocker/applocker-overview'
+  },
+
+  {
+    id: 8006,
+    source: 'Microsoft-Windows-AppLocker',
+    channel: 'Microsoft-Windows-AppLocker/Script',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'AppLocker Blocked Script',
+    short_desc: 'AppLocker blocked a script (.ps1, .vbs, .bat, .js) from running — policy enforcement.',
+    description: 'Event 8006 is generated when AppLocker blocks a script from executing because it does not match an Allow rule in the Script policy. Scripts covered include PowerShell (.ps1), VBScript (.vbs), batch (.bat/.cmd), and JavaScript (.js). Script blocking is a critical security control — most malware and attacker tooling uses scripts for execution. Event 8006 means the script enforcement layer is working, but may also indicate legitimate administration scripts need rules.',
+    why_it_happens: 'AppLocker Script rules apply the same publisher/path/hash logic as EXE rules but for scripting file types. Script blocking is particularly important for preventing PowerShell-based attacks and macro-driven malware. Blocked scripts generate 8006 in the Script log.',
+    what_good_looks_like: 'Only authorized scripts in approved locations (C:\\Windows\\System32, approved admin script paths). No unauthorized scripts blocked. IT scripts deployed to approved paths and covered by publisher or path rules.',
+    common_mistakes: [
+      'Not enabling script enforcement because it breaks PowerShell remoting — test in audit mode first',
+      'Not including PowerShell script paths used by monitoring agents and RMM tools in AppLocker rules'
+    ],
+    causes: [
+      'User attempting to run an unapproved script from Desktop or Downloads',
+      'Malware attempting to execute a downloaded PowerShell script',
+      'IT script deployed to a path not covered by AppLocker rules',
+      'Automation tool running scripts from a non-whitelisted location'
+    ],
+    steps: [
+      'Open Event Viewer → Applications and Services Logs → Microsoft → Windows → AppLocker → Script',
+      'Filter for Event 8006',
+      'Note the Script Path — is this an authorized admin script that needs a path rule?',
+      'If unauthorized script attempt: AppLocker is working as intended',
+      'Create a path rule for approved script directories',
+      'Consider using publisher rules for signed scripts (e.g., Microsoft-signed PowerShell modules)'
+    ],
+    symptoms: [
+      'script blocked by AppLocker',
+      'PowerShell script blocked',
+      'batch file blocked policy',
+      'VBScript blocked',
+      'script cannot run enterprise policy',
+      'AppLocker blocking scripts',
+      'admin script blocked AppLocker',
+      'automation script policy block'
+    ],
+    tags: ['applocker', 'script', 'powershell', 'security', 'policy', 'block'],
+    powershell: `# AppLocker Script Block Events
+# Eventful
+
+# Script blocks (8006) and audits (8005)
+Get-WinEvent -LogName 'Microsoft-Windows-AppLocker/Script' -ErrorAction SilentlyContinue |
+    Where-Object { $_.Id -in @(8005, 8006) -and $_.TimeCreated -gt (Get-Date).AddDays(-7) } |
+    Select-Object TimeCreated, Id,
+        @{N='Result'; E={ if ($_.Id -eq 8006) {'BLOCKED'} else {'AUDIT-BLOCK'} }},
+        Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [8004, 8005, 8007, 4104],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/windows-defender-application-control/applocker/applocker-overview'
+  },
+
+  {
+    id: 1002,
+    source: 'Application Hang',
+    channel: 'Application',
+    severity: 'Warning',
+    skill_level: 'Fundamental',
+    title: 'Application Not Responding (Hang)',
+    short_desc: 'An application stopped responding to Windows for more than 5 seconds and was detected as hung.',
+    description: 'Event 1002 from "Application Hang" is generated by Windows Error Reporting when a foreground application stops responding to Windows messages for more than 5 seconds. This is distinct from a crash (Event 1000) — the application process is still running but has frozen. The event includes the application name, version, and a hang type code. Common causes include deadlocks, blocking UI thread operations, and single-threaded apps waiting on slow I/O.',
+    why_it_happens: 'Applications hang when their main UI thread gets blocked — waiting on a synchronous file read, a locked mutex, a blocking network call, or a deadlock in code. The Windows message pump stops processing, causing the "Not Responding" state. Users typically kill the app or Windows offers to close it, which generates this event.',
+    what_good_looks_like: 'No 1002 events for critical business applications. Interactive applications remain responsive. Occasional hang events for complex operations (large Excel calc, database query) are tolerable if infrequent.',
+    common_mistakes: [
+      'Not checking if the hang correlates with slow network or disk I/O — "application hang" is often actually "application waiting for slow storage"',
+      'Treating all 1002 events as application bugs — some hangs are caused by the environment (slow disk, network timeout)'
+    ],
+    causes: [
+      'Application\'s main thread blocked on a synchronous network or disk operation',
+      'Deadlock between two threads',
+      'Anti-virus scanning files the application is trying to access',
+      'Application waiting for a COM server or external component',
+      'Large dataset being processed on the UI thread instead of a background thread'
+    ],
+    steps: [
+      'Filter Application log for Event 1002',
+      'Note the application name and version',
+      'Correlate with disk or network slowness around the same time',
+      'If recurring: enable Process Monitor (Sysinternals) when hang occurs to capture wait chains',
+      'Check for known hang bugs in the vendor\'s release notes',
+      'Consider ProcDump with -h flag to capture a hang dump: procdump -h <pid> C:\\dumps\\'
+    ],
+    symptoms: [
+      'application not responding',
+      'application freezing',
+      'program hangs',
+      'app freezes',
+      'Windows spinning wheel',
+      'application becomes unresponsive',
+      'program stops responding',
+      'application freeze',
+      'software hangs randomly'
+    ],
+    tags: ['hang', 'application', 'not-responding', 'freeze', 'wer', 'reliability'],
+    powershell: `# Application Hang Investigation
+# Eventful
+
+$startTime = (Get-Date).AddDays(-7)
+
+# Application hangs
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'Application Hang'
+    Id           = 1002
+    StartTime    = $startTime
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message |
+    Sort-Object TimeCreated -Descending | Select-Object -First 10 | Format-List`,
+    related_ids: [1000, 1001, 1026],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/win32/wer/wer-reference'
   }
 ];

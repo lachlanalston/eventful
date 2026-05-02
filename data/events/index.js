@@ -7,6 +7,10 @@ export { printEvents } from './print.js';
 export { dnsEvents } from './dns.js';
 export { groupPolicyEvents } from './grouppolicy.js';
 export { vssEvents } from './vss.js';
+export { hypervEvents } from './hyperv.js';
+export { certsEvents } from './certs.js';
+export { iisEvents } from './iis.js';
+export { dhcpServerEvents } from './dhcpserver.js';
 
 import { securityEvents } from './security.js';
 import { systemEvents } from './system.js';
@@ -17,6 +21,10 @@ import { printEvents } from './print.js';
 import { dnsEvents } from './dns.js';
 import { groupPolicyEvents } from './grouppolicy.js';
 import { vssEvents } from './vss.js';
+import { hypervEvents } from './hyperv.js';
+import { certsEvents } from './certs.js';
+import { iisEvents } from './iis.js';
+import { dhcpServerEvents } from './dhcpserver.js';
 
 export const allEvents = [
   ...securityEvents,
@@ -27,5 +35,9 @@ export const allEvents = [
   ...printEvents,
   ...dnsEvents,
   ...groupPolicyEvents,
-  ...vssEvents
+  ...vssEvents,
+  ...hypervEvents,
+  ...certsEvents,
+  ...iisEvents,
+  ...dhcpServerEvents
 ];
