@@ -75,14 +75,6 @@ function render(query) {
   const results = getResults(query);
   const q = query.trim();
 
-  // Nothing to show — no query and no filter
-  if (!q && activeSeverities.size === 0) {
-    $list.innerHTML = '';
-    $count.textContent = '';
-    showEmptyDetail();
-    return;
-  }
-
   if (!results.length) {
     $list.innerHTML = `<div class="list-empty"><p>No results</p></div>`;
     $count.textContent = '';
