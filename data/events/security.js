@@ -1852,5 +1852,49 @@ Get-WinEvent -ComputerName $computer -FilterHashtable @{
 } | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
     related_ids: [4798, 4627, 4688, 4732],
     ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4799'
+  },
+
+  {
+    id: 1102,
+    source: 'Microsoft-Windows-Eventlog',
+    channel: 'Security',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Security Audit Log Cleared',
+    short_desc: 'The Security event log was cleared — records who cleared it and when.',
+    description: 'Event ID 1102 from Microsoft-Windows-Eventlog is written to the Security log immediately before it is cleared. It records the account that performed the clear. For IT support, this event explains why a Security log starts from a recent date with no earlier history — someone cleared it. In an IT support context this is usually an admin clearing logs to free space or a management script. The key is identifying who cleared it and whether that was expected. All evidence from before the clear is permanently gone.',
+    why_it_happens: 'Written by the Windows event logging service immediately before the Security log is wiped. Clearing the Security log requires SeSecurityPrivilege — only administrators hold this right. Event 1102 is always the last event before the gap in the log.',
+    what_good_looks_like: 'Absent in most IT support logs. When present: check the SubjectUserName field — was this a known admin at an expected time? If yes, low priority. Unknown account or unexpected timing warrants follow-up.',
+    causes: [
+      'Admin clearing the log manually to free disk space',
+      'Log management or SIEM tool rotating the log',
+      'Diagnostic or setup script clearing logs',
+      'Automated policy clearing logs on schedule'
+    ],
+    steps: [
+      'Check SubjectUserName — who cleared the log',
+      'Confirm with that user or their manager whether the action was intentional',
+      'Check Event 104 in System log — if System log was also cleared at the same time, investigate further',
+      'Note: all log data before the clear is permanently gone'
+    ],
+    symptoms: [
+      'security log empty',
+      'no security events before a date',
+      'security log was cleared',
+      'event log history missing',
+      'logs start from today'
+    ],
+    tags: ['log-clear', 'security', 'audit', 'admin'],
+    powershell: `# Security Log Clear History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Security'
+    Id      = 1102
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [104, 4624, 4672],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-1102'
   }
 ];

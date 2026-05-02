@@ -2579,5 +2579,51 @@ Get-WinEvent -FilterHashtable @{
     Sort-Object TimeCreated -Descending | Format-List`,
     related_ids: [7, 11, 51, 27],
     ms_docs: null
+  },
+
+  {
+    id: 104,
+    source: 'Microsoft-Windows-Eventlog',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'System Event Log Cleared',
+    short_desc: 'The System event log was cleared — explains missing log history and records who did it.',
+    description: 'Event ID 104 from Microsoft-Windows-Eventlog is written to the System log immediately before it is cleared. Like Event 1102 (Security log cleared), it records the account that performed the action. For IT support this event is practically important: when a technician uploads a System log that only goes back a few days on a machine that has been running for years, Event 104 is why. It also means any disk errors, crash events, service failures, and other diagnostic data from before the clear are gone. Clearing the System log only requires local administrator rights — it is easier to do accidentally in Event Viewer than clearing the Security log.',
+    why_it_happens: 'Written immediately before the System log is wiped. Any local administrator can clear the System log through Event Viewer (right-click → Clear Log) or via wevtutil. This happens when admins clean up machines, run setup scripts, or when log management tools rotate logs.',
+    what_good_looks_like: 'Absent normally. When present: check who cleared it and confirm it was intentional. If System and Security logs were both cleared at the same time, correlate with Event 1102.',
+    causes: [
+      'Admin clearing log in Event Viewer to free space or start fresh',
+      'Setup or imaging script clearing logs before deploying a machine',
+      'Log management tool rotating logs',
+      'User accidentally clicking "Clear Log" in Event Viewer'
+    ],
+    steps: [
+      'Check the user account in the event message',
+      'Note the timestamp — all diagnostic history before this time is gone',
+      'If System and Security logs both cleared at same time: also check Event 1102',
+      'Confirm with the admin whether this was intentional'
+    ],
+    symptoms: [
+      'system log only goes back a few days',
+      'no event history',
+      'event log was cleared',
+      'missing logs',
+      'log starts from recent date',
+      'no crash history in logs'
+    ],
+    tags: ['log-clear', 'system', 'admin', 'history', 'diagnostic'],
+    powershell: `# System Log Clear History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Eventlog'
+    Id           = 104
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [1102],
+    ms_docs: null
   }
 ];
