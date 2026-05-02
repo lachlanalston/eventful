@@ -1137,5 +1137,445 @@ Get-WinEvent -ComputerName $computer -FilterHashtable @{
 } | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
     related_ids: [7036, 7000, 4688, 4698],
     ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4697'
+  },
+
+  {
+    id: 12,
+    source: 'Microsoft-Windows-Kernel-General',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'Operating System Started',
+    short_desc: 'The OS initialized successfully and logged the exact start time for this boot.',
+    description: 'Event ID 12 from Kernel-General is written early in every normal boot. It records the precise system time the OS kernel started running. On its own it is informational — no action needed. Its primary value in incident analysis is as a timeline anchor: you can see exactly when the machine booted, correlate it against Event 13 (shutdown) and Event 41 (unexpected reboot), and determine uptime at the time of an incident.',
+    why_it_happens: 'Logged by the Windows kernel during initialization on every boot, before user-mode processes start. The timestamp comes from the hardware clock (RTC) before time sync occurs, so it may be slightly off by a few seconds from NTP-corrected time.',
+    what_good_looks_like: 'One Event 12 per boot cycle. Frequent Event 12 entries without corresponding Event 13 entries before them indicates repeated unexpected reboots — correlate with Event 41.',
+    causes: [
+      'Normal system boot',
+      'Reboot after update',
+      'Reboot following a crash (Event 41)',
+      'Reboot after manual shutdown'
+    ],
+    steps: [
+      'Use Event 12 timestamps to map the full boot history of the machine',
+      'Check if Event 13 appears before each Event 12 — missing Event 13 means the previous shutdown was unexpected',
+      'Correlate with Event 41 to confirm crash vs. clean reboot',
+      'Measure uptime between Event 12 and the incident timestamp'
+    ],
+    symptoms: [
+      'when did the computer start',
+      'boot time',
+      'last reboot time',
+      'system start time',
+      'os startup'
+    ],
+    tags: ['boot', 'startup', 'kernel', 'timeline', 'uptime'],
+    powershell: `# Boot History (last 30 days)
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-General'
+    Id           = @(12, 13)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id,
+        @{N='Event'; E={ if ($_.Id -eq 12) {'STARTED'} else {'SHUTDOWN'} }} |
+    Sort-Object TimeCreated | Format-Table -AutoSize`,
+    related_ids: [13, 41, 6008, 6005],
+    ms_docs: null
+  },
+
+  {
+    id: 13,
+    source: 'Microsoft-Windows-Kernel-General',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'Operating System Shutdown',
+    short_desc: 'The OS began a clean shutdown and logged the exact time.',
+    description: 'Event ID 13 from Kernel-General is written at the beginning of every clean, intentional shutdown or restart. It is the counterpart to Event 12. In incident analysis its absence is the key signal — if you see Event 12 (boot) without a preceding Event 13 (clean shutdown), the previous session ended unexpectedly. That gap, combined with Event 41 or 6008, confirms a crash, power loss, or hard reset.',
+    why_it_happens: 'The Windows kernel writes Event 13 during the shutdown phase after user and service shutdown has completed. It is one of the last events written before the OS halts. If the machine crashes or loses power before reaching this phase, Event 13 is never written.',
+    what_good_looks_like: 'Every Event 12 (boot) should be preceded by an Event 13 (clean shutdown) from the previous boot. Exception: the very first boot after OS installation.',
+    causes: [
+      'Normal user-initiated shutdown or restart',
+      'Shutdown via update installation',
+      'Remote shutdown command',
+      'System entering hibernation (S4 sleep)'
+    ],
+    steps: [
+      'Find Event 12 entries and check for a preceding Event 13 — gap = unexpected shutdown',
+      'If no Event 13 before a boot: check Event 41 (crash/power loss) or Event 6008 (unexpected shutdown)',
+      'Correlate shutdown time with Event 1074 to see what initiated the shutdown',
+      'Repeated missing Event 13 entries = recurring stability problem requiring investigation'
+    ],
+    symptoms: [
+      'when did the computer shut down',
+      'last shutdown time',
+      'clean shutdown',
+      'unexpected reboot history',
+      'os shutdown time'
+    ],
+    tags: ['shutdown', 'kernel', 'timeline', 'uptime', 'clean-shutdown'],
+    powershell: `# Shutdown and Boot History (last 30 days)
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-General'
+    Id           = @(12, 13)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id,
+        @{N='Event'; E={ if ($_.Id -eq 12) {'STARTED'} else {'SHUTDOWN'} }} |
+    Sort-Object TimeCreated | Format-Table -AutoSize`,
+    related_ids: [12, 41, 1074, 6008],
+    ms_docs: null
+  },
+
+  {
+    id: 18,
+    source: 'Microsoft-Windows-Kernel-General',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'System Time Changed',
+    short_desc: 'The system clock was adjusted — either by NTP sync, a user, or a domain time policy.',
+    description: 'Event ID 18 from Kernel-General logs whenever the system clock is changed. The event records the old time, new time, and the process that made the change. In normal environments this happens regularly via W32tm (Windows Time Service) syncing to a domain controller or NTP server. It becomes significant in incident analysis if: the time change is large (hours or days), the process making the change is not W32tm or a trusted service, or it occurs immediately before suspicious activity (attackers sometimes shift clocks to corrupt log correlation).',
+    why_it_happens: 'The Windows Time Service (W32tm) adjusts the clock periodically to stay in sync with its configured time source. Domain-joined machines sync to a domain controller; standalone machines use time.windows.com. Large jumps happen when the machine was offline for a long time, the CMOS battery died, or someone manually changed the time.',
+    what_good_looks_like: 'Small adjustments (milliseconds to seconds) by the SYSTEM process or W32tm are normal. Investigate: large adjustments (minutes or more), adjustments by a non-system process, repeated adjustments in a short period, or time changes that correlate with other suspicious events.',
+    causes: [
+      'NTP or domain time sync (normal)',
+      'Manual clock change by a user or admin',
+      'CMOS/RTC battery failure causing clock drift',
+      'VM host adjusting guest clock',
+      'Time zone change',
+      'System recovering from long offline period'
+    ],
+    steps: [
+      'Check the ProcessName field — W32tm.exe or SYSTEM is expected',
+      'Check the magnitude of the change — small ms adjustments are normal, large jumps are not',
+      'If large jump: check CMOS battery health and NTP sync status (w32tm /query /status)',
+      'If made by unexpected process: investigate that process — potential indicator of tampering',
+      'Run: w32tm /query /status to check current sync health'
+    ],
+    symptoms: [
+      'clock changed',
+      'system time wrong',
+      'time jumped',
+      'timestamps are off',
+      'ntp sync problem',
+      'clock drift'
+    ],
+    tags: ['time', 'clock', 'ntp', 'sync', 'kernel', 'timeline'],
+    powershell: `# System Time Change History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-General'
+    Id           = 18
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        OldTime     = ($data | Where-Object Name -eq 'OldTime').'#text'
+        NewTime     = ($data | Where-Object Name -eq 'NewTime').'#text'
+        Process     = ($data | Where-Object Name -eq 'ProcessName').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [12, 13],
+    ms_docs: null
+  },
+
+  {
+    id: 20,
+    source: 'Microsoft-Windows-WindowsUpdateClient',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Beginner',
+    title: 'Windows Update Installation Failure',
+    short_desc: 'A Windows Update failed to install — the update and error code are recorded.',
+    description: 'Event ID 20 from WindowsUpdateClient is logged when an update download or installation fails. It records the update title, KB number, and the error code. This is the primary event for diagnosing Windows Update failures. The error code is the critical field — it maps to a specific failure reason (network, disk space, component corruption, conflicting software, etc.). Repeated failures of the same KB usually indicate an underlying system health problem rather than a transient network issue.',
+    why_it_happens: 'Windows Update failures occur for many reasons: network interruption during download, insufficient disk space (Windows needs 10–20 GB free), corruption in the Windows Update component store (DISM /ScanHealth), driver conflicts, third-party security software blocking the update, or the update being genuinely incompatible with installed hardware/software.',
+    what_good_looks_like: 'Occasional single failures followed by a successful install on retry are normal. Investigate: the same KB failing repeatedly across multiple attempts, multiple different KBs all failing, failures with component store corruption errors (0x800F0***), failures in the last 30 days with no successful updates.',
+    common_mistakes: [
+      'Not checking the error code — "update failed" tells you nothing, the hex code tells you everything',
+      'Running Windows Update troubleshooter first without checking disk space (most common root cause)',
+      'Not checking that Windows Update services are running (wuauserv, bits, cryptsvc, msiserver)',
+      'Forgetting that some updates require a reboot before the next update can install'
+    ],
+    causes: [
+      'Insufficient free disk space (need 10–20 GB)',
+      'Windows Update component store corruption',
+      'Windows Update services stopped or disabled',
+      'Network connectivity issue during download',
+      'Third-party security software blocking installation',
+      'Conflicting software or driver',
+      'Pending reboot blocking further updates'
+    ],
+    steps: [
+      'Note the error code from Event 20 — search it with the KB number for specific guidance',
+      'Check disk space: Get-PSDrive C | Select-Object Used, Free',
+      'Verify Update services running: Get-Service wuauserv, bits, cryptsvc | Select-Object Name, Status',
+      'Run DISM to check component health: DISM /Online /Cleanup-Image /CheckHealth',
+      'If corruption found: DISM /Online /Cleanup-Image /RestoreHealth',
+      'Then run: sfc /scannow',
+      'Check Event 19 (successful download) — if missing, download itself is failing (network/BITS)',
+      'Check free space in C:\\Windows\\SoftwareDistribution — clear with: net stop wuauserv && rd /s /q C:\\Windows\\SoftwareDistribution && net start wuauserv'
+    ],
+    symptoms: [
+      'windows update failed',
+      'update wont install',
+      'update error',
+      'kb failed to install',
+      'windows update stuck',
+      'updates keep failing',
+      'cumulative update failed',
+      'feature update failed'
+    ],
+    tags: ['windows-update', 'patch', 'installation', 'error', 'maintenance'],
+    powershell: `# Windows Update Failure History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-WindowsUpdateClient'
+    Id           = @(19, 20, 21, 43)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $type = switch ($_.Id) {
+        19 { 'DOWNLOAD_OK'  }
+        20 { 'INSTALL_FAIL' }
+        21 { 'INSTALL_FAIL' }
+        43 { 'DOWNLOAD_FAIL'}
+    }
+    [PSCustomObject]@{
+        Time    = $_.TimeCreated
+        Type    = $type
+        Message = $_.Message.Substring(0, [Math]::Min(120, $_.Message.Length))
+    }
+} | Sort-Object Time -Descending | Format-Table -AutoSize`,
+    related_ids: [19, 1074],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/deployment/update/windows-update-error-reference'
+  },
+
+  {
+    id: 5,
+    source: 'Microsoft-Windows-Kernel-Boot',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Intermediate',
+    title: 'Boot Configuration Data Loaded',
+    short_desc: 'The Boot Configuration Data (BCD) store was read and applied during startup.',
+    description: 'Event ID 5 from Kernel-Boot is logged during the early boot phase when Windows reads its Boot Configuration Data (BCD) store. The event records which boot entry was selected and the boot type (normal, safe mode, WinRE, etc.). It is informational in a normal boot, but useful for diagnosing repeated failures to boot into normal mode, unexpected safe mode boots, or BCD corruption. Check the BootType field: 1 = normal boot, 2 = safe mode, 3 = safe mode with networking.',
+    why_it_happens: 'The Windows Boot Manager reads the BCD store on every boot to determine which OS to load and in what mode. Event 5 is written once per boot as confirmation that this step completed. If the BCD is corrupt or missing, the boot process fails before this event is written.',
+    what_good_looks_like: 'BootType 1 (normal) on every boot. Investigate: repeated BootType 2/3 (safe mode) without admin action, multiple Event 5 entries for a single boot cycle (can indicate boot repair attempts), or absence of Event 5 before a successful Event 12 (rare, possible if BCD events are filtered).',
+    causes: [
+      'Normal system boot (BootType 1)',
+      'Safe mode boot (BootType 2/3) — user or automatic recovery',
+      'Windows Recovery Environment (BootType 4)',
+      'Automatic Repair triggered by repeated boot failures',
+      'Admin booting into diagnostic mode'
+    ],
+    steps: [
+      'Check BootType field — normal is 1, safe mode is 2 or 3',
+      'If repeated safe mode boots: check what triggered them (user, automatic repair, or policy)',
+      'If BCD issues suspected: bcdedit /enum all (run as admin)',
+      'To repair BCD: boot from Windows media → Repair your computer → Startup Repair',
+      'Check Event 12 and 41 for correlation with unexpected boot modes'
+    ],
+    symptoms: [
+      'booted into safe mode',
+      'unexpected safe mode',
+      'boot configuration',
+      'bcd',
+      'startup mode',
+      'computer keeps booting to recovery'
+    ],
+    tags: ['boot', 'bcd', 'safe-mode', 'startup', 'kernel-boot'],
+    powershell: `# Recent Boot Type History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-Boot'
+    Id           = 5
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    $type = ($data | Where-Object Name -eq 'BootType').'#text'
+    $desc = switch ($type) {
+        '1' { 'Normal' }
+        '2' { 'Safe Mode' }
+        '3' { 'Safe Mode with Networking' }
+        '4' { 'WinRE / Recovery' }
+        default { "Type $type" }
+    }
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        BootType    = $type
+        Description = $desc
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [12, 41, 6008],
+    ms_docs: null
+  },
+
+  {
+    id: 27,
+    source: 'Microsoft-Windows-Kernel-Boot',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Boot Environment Error',
+    short_desc: 'The boot environment encountered a problem setting or reading a boot configuration value.',
+    description: 'Event ID 27 from Kernel-Boot is generated when the boot environment fails to properly apply a configuration value from the BCD store, or when a requested boot option cannot be set. This often appears after failed Windows Update installs, interrupted in-place upgrades, or BCD corruption. It can also appear from the disk driver context when a device was removed without a proper dismount ("surprise removal"). Check the Provider field in the raw event — Kernel-Boot indicates a boot configuration issue; the disk driver indicates a storage device removal problem.',
+    why_it_happens: 'Boot configuration errors arise when the BCD store has an inconsistency, a pending boot operation could not complete (e.g., an update that required a specific boot mode failed), or the boot hardware abstraction layer encountered unexpected firmware behaviour. Disk-context Event 27 occurs when Windows detects that a device was physically removed while still mounted — common with hot-swap bays, USB drives with running I/O, or iSCSI targets that dropped.',
+    what_good_looks_like: 'Absence is normal. Any occurrence warrants investigation. A single isolated Event 27 after a known upgrade attempt is low priority. Repeated occurrences or Event 27 combined with disk I/O errors (51, 129) is higher priority.',
+    causes: [
+      'Failed or interrupted Windows Update requiring a boot-time operation',
+      'BCD store corruption or inconsistency',
+      'Storage device removed without safe ejection (Kernel-Boot or disk context)',
+      'Firmware/UEFI reporting an unexpected boot configuration state',
+      'iSCSI or network storage target disconnect'
+    ],
+    steps: [
+      'Check the Provider/Source field — determines if this is a boot config or disk removal issue',
+      'For boot config: run bcdedit /enum all and look for inconsistencies',
+      'Run startup repair if the machine had boot problems: boot from Windows media',
+      'For disk removal: identify which device was removed and check Event 51 or 129 around the same time',
+      'Check Windows Update history for failed installs immediately before Event 27'
+    ],
+    symptoms: [
+      'boot error',
+      'boot configuration problem',
+      'drive surprise removal',
+      'device disconnected unexpectedly',
+      'usb drive error on removal',
+      'iscsi disconnected'
+    ],
+    tags: ['boot', 'bcd', 'disk', 'removal', 'kernel-boot', 'storage'],
+    powershell: `# Boot Environment Errors
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'System'
+    Id        = 27
+    StartTime = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, ProviderName, LevelDisplayName, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [5, 12, 41, 51, 129],
+    ms_docs: null
+  },
+
+  {
+    id: 238,
+    source: 'Microsoft-Windows-Kernel-Processor-Power',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Advanced',
+    title: 'Processor Power Capability Change',
+    short_desc: 'A processor reported a change in its available power or performance states.',
+    description: 'Event ID 238 from Kernel-Processor-Power is logged when a processor reports a change in its power management capabilities or performance state enumeration. This typically occurs during boot, after a driver update, or when firmware/UEFI adjusts CPU power policy. On its own it is informational. It becomes relevant in incident investigations involving unexpected CPU throttling, performance degradation, or thermal events — particularly when combined with Event 37 (CPU speed limited by firmware) or high-temperature readings.',
+    why_it_happens: 'Modern processors expose their available performance and power states (P-states, C-states) to the OS via ACPI. When the set of available states changes — due to thermal limits, firmware intervention, driver update, or hardware capability reporting — Windows logs Event 238 to record the new state of affairs. In some cases, the CPU reports fewer performance states than expected because the firmware is limiting it due to a thermal condition.',
+    what_good_looks_like: 'Appearing once at boot for each logical processor is normal. Investigate: Event 238 occurring outside of boot, in conjunction with performance complaints, or combined with thermal events and Event 37.',
+    causes: [
+      'Normal processor power state enumeration at boot',
+      'CPU driver or firmware update changing available P-states',
+      'Thermal throttling causing firmware to restrict performance states',
+      'Virtualisation host changing CPU capability exposure',
+      'BIOS/UEFI setting change affecting power management'
+    ],
+    steps: [
+      'Check if Event 238 appears only at boot — if so, likely informational',
+      'If mid-operation: check for thermal events and CPU temperature (Get-WmiObject MSAcpi_ThermalZoneTemperature -Namespace root/wmi)',
+      'Check Event 37 (Kernel-Processor-Power) for CPU speed limiting',
+      'Check BIOS/UEFI for power management settings — "Performance" mode vs "Power Saver"',
+      'Ensure CPU drivers and chipset drivers are current'
+    ],
+    symptoms: [
+      'cpu throttling',
+      'processor performance changed',
+      'cpu running slow',
+      'processor power state',
+      'cpu frequency reduced'
+    ],
+    tags: ['cpu', 'power', 'performance', 'throttling', 'processor', 'kernel'],
+    powershell: `# CPU Power Events
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-Processor-Power'
+    Id           = @(37, 238, 247)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, LevelDisplayName, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [37, 247, 41],
+    ms_docs: null
+  },
+
+  {
+    id: 247,
+    source: 'Microsoft-Windows-Kernel-Processor-Power',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Advanced',
+    title: 'Processor Performance State Transition',
+    short_desc: 'A processor transitioned to a different performance (P-state) level.',
+    description: 'Event ID 247 from Kernel-Processor-Power records a significant processor performance state (P-state) transition — typically a switch to a lower performance tier due to power policy, thermal management, or battery/power plan constraints. Like Event 238, it is informational in isolation but important when investigating CPU performance degradation. The event records the processor index, the target performance percentage, and the reason for the transition. Repeated 247 events showing reductions to low percentages indicate sustained throttling.',
+    why_it_happens: 'Windows power management continuously adjusts CPU performance states to balance power consumption against workload demand. Event 247 is written when this adjustment is significant enough to log — particularly when performance is constrained rather than just scaled up. The trigger can be a temperature threshold being reached, a power plan switch (Balanced → Power Saver), a UPS switching to battery, or firmware-level limits being applied.',
+    what_good_looks_like: 'Occasional 247 entries with performance levels that return to 100% are normal under balanced power plans. Investigate: consistent 247 entries showing low performance percentages during business hours, 247 paired with thermal events, or 247 following a UPS or power supply event.',
+    causes: [
+      'Active power plan throttling CPU (Balanced or Power Saver mode)',
+      'Thermal throttling — CPU too hot',
+      'UPS switched to battery — system reducing power draw',
+      'Firmware-level power limits (TDP limits)',
+      'Virtualisation host restricting CPU performance'
+    ],
+    steps: [
+      'Check the performance percentage in the event — sustained below 50% is a problem',
+      'Check CPU temperatures during the throttling period',
+      'Review active power plan: powercfg /getactivescheme',
+      'Change to High Performance if throttling is unwanted: powercfg /setactive SCHEME_MIN',
+      'Check Event 37 for firmware-level speed limits',
+      'If on a laptop/UPS: check power source at time of events'
+    ],
+    symptoms: [
+      'cpu running slow',
+      'processor throttled',
+      'performance degraded',
+      'computer feels sluggish',
+      'cpu percentage low',
+      'performance state change'
+    ],
+    tags: ['cpu', 'power', 'throttling', 'performance', 'p-state', 'thermal'],
+    powershell: `# Processor Performance State Events
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-Processor-Power'
+    Id           = @(37, 238, 247)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        Time        = $_.TimeCreated
+        EventId     = $_.Id
+        Processor   = ($data | Where-Object Name -eq 'ProcessorNumber').'#text'
+        PerfPercent = ($data | Where-Object Name -eq 'TargetProcessorThrottle').'#text'
+        Message     = $_.Message.Substring(0, [Math]::Min(100, $_.Message.Length))
+    }
+} | Sort-Object Time -Descending | Format-Table -AutoSize`,
+    related_ids: [238, 37, 41],
+    ms_docs: null
   }
 ];
