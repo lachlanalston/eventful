@@ -28,9 +28,8 @@ const $count   = document.getElementById('count');
 const $detail  = document.getElementById('detail');
 
 // ── State ─────────────────────────────────────────────────────────────────────
-let activeId         = null;
-let activeSeverities = new Set();
-let checkedSteps     = JSON.parse(localStorage.getItem('ef_steps') || '{}');
+let activeId     = null;
+let checkedSteps = JSON.parse(localStorage.getItem('ef_steps') || '{}');
 function saveSteps() { localStorage.setItem('ef_steps', JSON.stringify(checkedSteps)); }
 
 // ── Query ─────────────────────────────────────────────────────────────────────
@@ -45,11 +44,6 @@ function getResults(query) {
     results = allEvents.filter(e => e.id === parseInt(q, 10));
   } else {
     results = fuse.search(q).map(r => r.item);
-  }
-
-  // Apply severity filter
-  if (activeSeverities.size > 0) {
-    results = results.filter(e => activeSeverities.has(e.severity));
   }
 
   return results;
@@ -260,24 +254,6 @@ function wireDetail(panel, event) {
   });
 }
 
-// ── Severity filters (multi-select checkboxes) ───────────────────────────────
-function syncFilterUI() {
-  document.querySelectorAll('.sev-cb').forEach(cb => {
-    cb.checked = activeSeverities.has(cb.value);
-    cb.closest('.sev-chip').classList.toggle('active', cb.checked);
-  });
-}
-
-document.querySelectorAll('.sev-cb').forEach(cb => {
-  cb.addEventListener('change', () => {
-    if (cb.checked) activeSeverities.add(cb.value);
-    else activeSeverities.delete(cb.value);
-    syncFilterUI();
-    activeId = null;
-    render($search.value);
-  });
-});
-
 // ── Search input ──────────────────────────────────────────────────────────────
 let timer;
 $search.addEventListener('input', () => {
@@ -298,23 +274,15 @@ $search.addEventListener('keydown', e => {
 function updateUrl(q) {
   const url = new URL(window.location);
   if (q) url.searchParams.set('q', q); else url.searchParams.delete('q');
-  if (activeSeverities.size > 0) url.searchParams.set('severity', [...activeSeverities].join(','));
-  else url.searchParams.delete('severity');
   history.replaceState(null, '', url);
 }
 
 // ── Init from URL ─────────────────────────────────────────────────────────────
-const params  = new URLSearchParams(location.search);
-const initQ   = params.get('q') || '';
-const initSev = params.get('severity') || '';
+const params = new URLSearchParams(location.search);
+const initQ  = params.get('q') || '';
 
-if (initSev) {
-  initSev.split(',').forEach(s => { const t = s.trim(); if (t) activeSeverities.add(t); });
-  syncFilterUI();
-}
-
-if (initQ || activeSeverities.size > 0) {
-  if (initQ) $search.value = initQ;
+if (initQ) {
+  $search.value = initQ;
   render(initQ);
 } else {
   window.location.href = 'index.html';
