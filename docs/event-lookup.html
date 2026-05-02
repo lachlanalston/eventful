@@ -6,10 +6,10 @@
   <title>Event Lookup — Eventful</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/eventLookup-xuiCV1uj.js"></script>
+  <script type="module" crossorigin src="./assets/eventLookup-BfCdJpzS.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/theme-gEBc2EcC.js">
   <link rel="modulepreload" crossorigin href="./assets/index-xfVKLF0W.js">
-  <link rel="stylesheet" crossorigin href="./assets/eventLookup-D5FNZRjx.css">
+  <link rel="stylesheet" crossorigin href="./assets/eventLookup-InMPro_I.css">
 </head>
 <body>
 
@@ -29,8 +29,30 @@
     <button class="theme-btn" title="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
   </header>
 
+  <!-- Hero search state -->
+  <div id="hero-section" class="lookup-hero">
+    <div class="lookup-hero-inner">
+      <h1 class="lookup-title">Search the symptom.<br>Find the Event ID.</h1>
+      <p class="lookup-sub">A Windows event log reference for MSP technicians.</p>
+      <div class="lookup-search-wrap">
+        <svg class="lookup-search-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="hero-search" type="search" class="lookup-search-input"
+          placeholder="account locked out, blue screen, 4625…"
+          autocomplete="off" spellcheck="false" autofocus />
+      </div>
+      <div class="lookup-chips">
+        <a href="?q=account+locked+out" class="chip">account locked out</a>
+        <a href="?q=blue+screen" class="chip">blue screen</a>
+        <a href="?q=rdp+disconnecting" class="chip">RDP disconnecting</a>
+        <a href="?q=service+crashed" class="chip">service crashed</a>
+        <a href="?q=4625" class="chip">Event 4625</a>
+        <a href="?q=4740" class="chip">Event 4740</a>
+      </div>
+    </div>
+  </div>
+
   <!-- Two-panel layout below the header -->
-  <div class="layout">
+  <div id="results-layout" class="layout" hidden>
 
     <aside class="sidebar">
       <div id="count" class="result-count"></div>

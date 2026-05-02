@@ -28,9 +28,11 @@
   --border2:  rgba(0,0,0,0.12);
 }
 
-html, body { height: 100%; overflow: hidden; }
+html { height: 100%; }
 
 body {
+  display: flex;
+  flex-direction: column;
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
@@ -145,6 +147,88 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 
 .theme-btn:hover { color: var(--text2); border-color: var(--text3); }
+
+/* ─────────────────────────────────────────
+   HERO SEARCH STATE
+───────────────────────────────────────── */
+.lookup-hero {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px 80px;
+}
+
+.lookup-hero-inner {
+  width: 100%;
+  max-width: 560px;
+  text-align: center;
+}
+
+.lookup-title {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1.2;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.lookup-sub {
+  font-size: 15px;
+  color: var(--text2);
+  line-height: 1.7;
+  margin-bottom: 32px;
+}
+
+.lookup-search-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 6px 0 16px;
+  height: 52px;
+  gap: 10px;
+  transition: border-color 0.15s;
+  margin-bottom: 20px;
+}
+.lookup-search-wrap:focus-within { border-color: rgba(245,158,11,0.4); }
+
+.lookup-search-icon { color: var(--text3); flex-shrink: 0; }
+
+.lookup-search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  min-width: 0;
+  -webkit-appearance: none;
+}
+.lookup-search-input::placeholder { color: var(--text3); }
+.lookup-search-input::-webkit-search-cancel-button { display: none; }
+
+.lookup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  text-decoration: none;
+  transition: color 0.15s, border-color 0.15s;
+}
+.chip:hover { color: var(--amber); border-color: rgba(245,158,11,0.25); }
 
 /* ─────────────────────────────────────────
    LAYOUT
