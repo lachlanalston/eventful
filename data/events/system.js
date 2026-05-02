@@ -1994,5 +1994,334 @@ Get-WinEvent -FilterHashtable @{
     Format-Table -AutoSize`,
     related_ids: [],
     ms_docs: null
+  },
+
+  {
+    id: 1,
+    source: 'Microsoft-Windows-Power-Troubleshooter',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'System Resumed from Sleep',
+    short_desc: 'The system woke from sleep (S3) and logged the sleep duration and wake source.',
+    description: 'Event ID 1 from Power-Troubleshooter is written every time the system resumes from sleep (S3 suspend-to-RAM). It records the time the system entered sleep, the time it woke, and the wake source (what triggered the wakeup — a keyboard press, mouse movement, network packet, scheduled task, or Wake-on-LAN). In a healthy system this is informational. It becomes diagnostic when investigating sleep-related crashes (system does not resume, resumes to BSOD, or resumes with corrupted state), unexpected wakeups keeping a machine awake all night, or correlating crash events against sleep/wake cycles.',
+    why_it_happens: 'Written by the Power Troubleshooter component on every S3 resume. The SleepTime and WakeTime fields give exact duration. The WakeSourceType and WakeSourceText fields identify what triggered the resume — this is the key data for diagnosing unwanted wakeups.',
+    what_good_looks_like: 'Present on any machine using sleep mode — normal. Investigate: Event 1 followed immediately by Event 41 or 1001 (crash on resume), Event 1 entries at unexpected hours (machine waking overnight), missing Event 1 when user says the machine would not wake (possibly hung in sleep state).',
+    causes: [
+      'Normal user wakeup (keyboard, mouse, power button)',
+      'Network adapter Wake-on-LAN packet',
+      'Scheduled task configured to wake the system',
+      'Windows Update waking machine to install updates',
+      'USB device activity triggering resume',
+      'Automatic Maintenance task waking the machine'
+    ],
+    steps: [
+      'Check WakeSourceText field — identifies exactly what woke the machine',
+      'For overnight wakeups: check scheduled tasks and Windows Update settings',
+      'To list all wake timers: powercfg /waketimers',
+      'To check last wake source: powercfg /lastwake',
+      'If crashes on resume: check Event 41 and 1001 immediately after Event 1 timestamps',
+      'To disable Wake-on-LAN: Device Manager → Network Adapter → Power Management → uncheck "Allow this device to wake the computer"',
+      'For a machine that will not resume: check Event 42 (entered sleep) then look for a missing Event 1'
+    ],
+    symptoms: [
+      'computer wakes up by itself',
+      'pc turns on overnight',
+      'computer woke unexpectedly',
+      'crash after sleep',
+      'blue screen after waking',
+      'computer wont wake from sleep',
+      'machine on when i arrive',
+      'sleep not working'
+    ],
+    tags: ['sleep', 'power', 'resume', 'wake', 'wakeup', 's3'],
+    powershell: `# Sleep/Wake History and Wake Sources
+# Eventful
+
+# Recent wake events
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Power-Troubleshooter'
+    Id           = 1
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        WakeTime   = $_.TimeCreated
+        SleepTime  = ($data | Where-Object Name -eq 'SleepTime').'#text'
+        WakeSource = ($data | Where-Object Name -eq 'WakeSourceText').'#text'
+    }
+} | Sort-Object WakeTime -Descending | Format-Table -AutoSize
+
+# Current wake timers
+powercfg /waketimers
+
+# Last wake source
+powercfg /lastwake`,
+    related_ids: [42, 107, 41, 6008],
+    ms_docs: null
+  },
+
+  {
+    id: 42,
+    source: 'Microsoft-Windows-Kernel-Power',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'System Entering Sleep',
+    short_desc: 'The system is transitioning into a sleep state (S3 or S4 hibernate).',
+    description: 'Event ID 42 from Kernel-Power is logged when the system begins a sleep transition. The TargetSleepState field indicates the target state: 3 = sleep (S3, suspend-to-RAM), 4 = hibernate (S4, suspend-to-disk). This event pairs with Event 1 (resume from sleep) and Event 107 (resume from hibernate) to build a complete sleep/wake timeline. Its diagnostic value is in detecting unexpected sleep entries (machine going to sleep unexpectedly during use) and as the "last checkpoint" before a machine that failed to resume — if Event 42 exists but no Event 1 follows, the machine may have crashed during sleep or failed to wake.',
+    why_it_happens: 'Written by the Kernel-Power component when the OS commits to entering a sleep state, after all pre-sleep notifications have been sent to drivers and applications. The actual system state change happens immediately after this event is written.',
+    what_good_looks_like: 'Appears on every sleep entry — normal. Investigate: Event 42 (sleep) with no following Event 1 (wake) — machine may have hard-crashed during sleep. Event 42 occurring unexpectedly during active use — could be an aggressive power plan timeout or a driver triggering sleep.',
+    causes: [
+      'User-initiated sleep (Start → Sleep, closing laptop lid)',
+      'Power plan idle timeout',
+      'Windows Automatic Maintenance triggering sleep after completion',
+      'Remote management or policy forcing sleep',
+      'Low battery threshold on laptop triggering hibernation'
+    ],
+    steps: [
+      'Check TargetSleepState: 3 = sleep, 4 = hibernate',
+      'If Event 42 exists but no Event 1 follows: machine likely crashed in sleep — check Event 41',
+      'If machine sleeps unexpectedly: check power plan idle timeout settings (powercfg /query)',
+      'Check for wake after Event 42: look for Event 1 or 107 with matching timestamp',
+      'For laptops sleeping unexpectedly: check battery threshold settings in power plan'
+    ],
+    symptoms: [
+      'computer goes to sleep by itself',
+      'pc keeps going to sleep',
+      'computer slept and wont wake',
+      'machine powered off during sleep',
+      'laptop sleeping unexpectedly',
+      'computer sleeps too quickly'
+    ],
+    tags: ['sleep', 'hibernate', 'power', 's3', 's4', 'kernel-power'],
+    powershell: `# Sleep Transition History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-Power'
+    Id           = @(42, 107)
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml   = [xml]$_.ToXml()
+    $data  = $xml.Event.EventData.Data
+    $state = ($data | Where-Object Name -eq 'TargetSleepState').'#text'
+    $desc  = switch ($_.Id) {
+        42  { if ($state -eq '4') {'ENTERING HIBERNATE'} else {'ENTERING SLEEP'} }
+        107 { 'RESUMED FROM HIBERNATE' }
+    }
+    [PSCustomObject]@{
+        Time      = $_.TimeCreated
+        EventId   = $_.Id
+        Transition = $desc
+    }
+} | Sort-Object Time -Descending | Format-Table -AutoSize`,
+    related_ids: [1, 107, 41, 6008],
+    ms_docs: null
+  },
+
+  {
+    id: 107,
+    source: 'Microsoft-Windows-Kernel-Power',
+    channel: 'System',
+    severity: 'Information',
+    skill_level: 'Beginner',
+    title: 'System Resumed from Hibernation',
+    short_desc: 'The system woke from hibernation (S4) — the OS was restored from the hibernation file on disk.',
+    description: 'Event ID 107 from Kernel-Power is written when the system resumes from hibernation (S4 suspend-to-disk), where system state was saved to hiberfil.sys and full power was cut. Unlike sleep (S3) which only cuts power to non-essential components, hibernation cuts all power — so resume requires reading the entire system state back from disk. This makes hibernate resume slower than sleep resume and more dependent on disk health. If Event 107 is absent after an Event 42 with TargetSleepState=4, the machine failed to resume from hibernation — check for disk errors (Event 51, 129) and Event 41.',
+    why_it_happens: 'Hibernate is triggered by a power plan low-battery threshold, an explicit hibernate command, or "Fast Startup" on Windows 10/11 (which hibernates the kernel session on shutdown). Fast Startup means that on most Windows 10/11 machines, every normal shutdown is followed by a hibernate-style resume on next boot — Event 107 will appear on machines using Fast Startup even without user-initiated hibernation.',
+    what_good_looks_like: 'Present on machines with hibernate or Fast Startup enabled — normal. On Windows 10/11 with Fast Startup, expect Event 107 on most boots instead of Event 12 (clean OS start). Investigate: Event 107 absent when expected (failed hibernate resume), Event 107 followed by application instability (state corruption during restore), or Event 107 taking unusually long (slow disk causing slow resume).',
+    causes: [
+      'Laptop reaching critical battery threshold',
+      'User explicitly choosing Hibernate from Start menu',
+      'Fast Startup on Windows 10/11 (normal shutdown uses hibernate)',
+      'Hybrid sleep resuming from disk after power loss'
+    ],
+    steps: [
+      'If machine fails to resume from hibernate: check Event 41 (crash) and disk health events (51, 129)',
+      'If applications are unstable after resume: Fast Startup may be restoring a corrupt session — disable it and do a full shutdown',
+      'To disable Fast Startup: Control Panel → Power Options → Choose what the power buttons do → uncheck "Turn on fast startup"',
+      'If hibernate file corrupt: run powercfg /h off then powercfg /h on to rebuild it',
+      'Check disk read speed — slow hibernate resume is almost always a disk health or interface speed issue'
+    ],
+    symptoms: [
+      'computer wont come back from hibernate',
+      'resume from hibernate failed',
+      'slow to wake from hibernate',
+      'fast startup issue',
+      'shutdown and restart slow',
+      'hibernate not working',
+      'applications broken after resume'
+    ],
+    tags: ['hibernate', 'power', 'resume', 's4', 'fast-startup', 'kernel-power'],
+    powershell: `# Hibernate Resume History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-Kernel-Power'
+    Id           = 107
+    StartTime    = (Get-Date).AddDays(-14)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize
+
+# Check if Fast Startup is enabled
+$fss = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Power' -Name HiberbootEnabled -ErrorAction SilentlyContinue).HiberbootEnabled
+"Fast Startup enabled: $($fss -eq 1)"
+
+# Hibernate file status
+powercfg /h`,
+    related_ids: [42, 1, 41, 51, 129],
+    ms_docs: null
+  },
+
+  {
+    id: 7,
+    source: 'disk',
+    channel: 'System',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Disk Bad Block Detected',
+    short_desc: 'The disk driver confirmed a bad block — a sector that cannot be reliably read. Immediate action required.',
+    description: 'Event ID 7 from the disk driver means the drive has a confirmed bad sector — a physical location on the disk that cannot be read even after exhausting all internal retries. This is more severe than Event 51 (paging I/O error, which may recover) and more definitive than Event 153 (retriable error). A bad block is unrecoverable at the current sector. The OS will attempt to remap the sector using the drive\'s spare sector pool, but the underlying cause — media degradation, mechanical damage, or NAND cell failure — is progressive. Any appearance of Event 7 means the disk is failing. Data backup should begin immediately and disk replacement should be planned.',
+    why_it_happens: 'Hard disks and SSDs maintain a pool of spare sectors to remap bad blocks. When a sector fails all read retries (in-drive and OS-level), the driver logs Event 7 and requests remapping. On an HDD this indicates physical media degradation — the magnetic coating has failed at that location. On an SSD it indicates NAND cell wear or a controller fault. The drive may continue to function for days or months after the first Event 7, but the failure is confirmed and progressive.',
+    what_good_looks_like: 'Absence is normal for a healthy drive — even one occurrence is significant. Any Event 7 means the disk has confirmed unrecoverable media damage.',
+    common_mistakes: [
+      'Running chkdsk and thinking it fixed the problem — chkdsk marks bad sectors but the drive is still failing',
+      'Not starting a backup immediately upon seeing Event 7',
+      'Waiting for more symptoms before acting — bad blocks multiply, not stay singular',
+      'Assuming the data on the bad block was unimportant'
+    ],
+    causes: [
+      'Physical media degradation (HDD platter surface damage)',
+      'NAND cell wear-out (SSD)',
+      'Mechanical shock or vibration damage',
+      'Overheating causing write errors that corrupt sectors permanently',
+      'Drive age — HDD sectors degrade over time under normal use'
+    ],
+    steps: [
+      'Start a backup immediately — this drive is failing',
+      'Check SMART: reallocated sector count (attribute 5) should now be non-zero',
+      'Run chkdsk /r to mark bad sectors and attempt data recovery from affected areas: chkdsk C: /r /x',
+      'Check Event 51 and 129 nearby — if all three present, drive failure is active and accelerating',
+      'Order a replacement drive — do not wait',
+      'After data backup, consider running manufacturer diagnostic tool for a full surface scan'
+    ],
+    symptoms: [
+      'bad sector',
+      'hard drive bad block',
+      'disk failing',
+      'chkdsk found errors',
+      'hard drive error',
+      'file system errors',
+      'disk read error',
+      'drive dying',
+      'data corruption',
+      'files corrupted'
+    ],
+    tags: ['disk', 'storage', 'bad-block', 'bad-sector', 'hardware', 'critical', 'failure', 'data-loss'],
+    powershell: `# Bad Block and Disk Error Investigation
+# Eventful
+
+# Disk error events (last 30 days)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'disk'
+    Id           = @(7, 11, 51, 153)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# SMART — check reallocated sectors
+Get-PhysicalDisk | ForEach-Object {
+    $rel = $_ | Get-StorageReliabilityCounter
+    [PSCustomObject]@{
+        Disk         = $_.FriendlyName
+        Health       = $_.HealthStatus
+        ReadErrors   = $rel.ReadErrorsTotal
+        WriteErrors  = $rel.WriteErrorsTotal
+        Wear         = "$($rel.Wear)%"
+    }
+} | Format-Table -AutoSize`,
+    related_ids: [11, 51, 129, 153, 55],
+    ms_docs: null
+  },
+
+  {
+    id: 11,
+    source: 'disk',
+    channel: 'System',
+    severity: 'Error',
+    skill_level: 'Intermediate',
+    title: 'Disk Controller Error',
+    short_desc: 'The disk driver detected a controller-level error on a storage device — hardware fault in the drive, cable, or controller.',
+    description: 'Event ID 11 from the disk driver indicates a controller error — the disk or the controller responsible for communicating with it returned an error that the driver could not handle through normal I/O retry. The event identifies the affected device path (e.g., \\Device\\Harddisk0\\DR0). This is distinct from Event 51 (paging I/O error) and Event 7 (bad block) — Event 11 points more specifically to a hardware communication failure rather than a media read failure. Common sources: a failing disk, a bad SATA cable, a failing SATA port on the motherboard, or an overloaded/failing disk controller. On a machine reporting random crashes or freezes, Event 11 paired with Event 51 is a strong indicator of imminent drive failure.',
+    why_it_happens: 'The disk driver communicates with drives via AHCI/NVMe commands. When the drive reports an internal error condition (not just a read retry failure, but an actual hardware error status), the driver logs Event 11. Causes include: the drive reporting an unrecoverable command error, the SATA/NVMe interface experiencing signal integrity issues (bad cable, bent pin, marginal power), or the drive controller itself failing.',
+    what_good_looks_like: 'Absence is normal. Any occurrence warrants investigation. Event 11 on an HDD with multiple occurrences over days or weeks means replace the drive. Event 11 on an SSD may indicate a firmware or controller issue — check for firmware updates before replacing.',
+    common_mistakes: [
+      'Assuming it is always the drive — a bad SATA cable is a very common cause and takes 30 seconds to replace',
+      'Not checking which disk the error is on (the device path in the event)',
+      'Replacing the drive without testing the cable first — replacing the drive then getting the same error from the cable is frustrating and expensive'
+    ],
+    causes: [
+      'Failing hard disk or SSD (most common)',
+      'Loose or failing SATA data cable',
+      'Failing SATA port on motherboard',
+      'Insufficient or noisy power to the drive',
+      'Failing disk controller chip',
+      'Drive overheating'
+    ],
+    steps: [
+      'Identify the affected disk from the device path in the event',
+      'Reseat SATA cable at both ends — replace if possible (cheapest fix first)',
+      'Check SMART data for the identified disk',
+      'Move the drive to a different SATA port on the motherboard to rule out a bad port',
+      'Check drive temperature — Get-PhysicalDisk | Get-StorageReliabilityCounter | Select Temperature',
+      'Check Event 7 and 51 nearby — triple combination means replace immediately',
+      'Back up data before doing further testing'
+    ],
+    symptoms: [
+      'disk error',
+      'hard drive error',
+      'controller error',
+      'drive not responding',
+      'random crashes',
+      'computer freezing',
+      'disk read write error',
+      'storage device error',
+      'sata error'
+    ],
+    tags: ['disk', 'storage', 'controller', 'hardware', 'cable', 'error', 'failure'],
+    powershell: `# Disk Controller Error Investigation
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'disk'
+    Id           = @(11, 7, 51)
+    StartTime    = (Get-Date).AddDays(-14)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# Physical disk health
+Get-PhysicalDisk | ForEach-Object {
+    $rel = $_ | Get-StorageReliabilityCounter
+    [PSCustomObject]@{
+        Disk        = $_.FriendlyName
+        Health      = $_.HealthStatus
+        Temperature = "$($rel.Temperature) C"
+        ReadErrors  = $rel.ReadErrorsTotal
+        WriteErrors = $rel.WriteErrorsTotal
+        Wear        = "$($rel.Wear)%"
+    }
+} | Format-Table -AutoSize`,
+    related_ids: [7, 51, 129, 153, 55],
+    ms_docs: null
   }
 ];

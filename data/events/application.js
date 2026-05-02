@@ -269,5 +269,127 @@ Get-WinEvent -ComputerName $computer -FilterHashtable @{
     Format-List`,
     related_ids: [1000, 1001, 1002],
     ms_docs: 'https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-run'
+  },
+
+  {
+    id: 1530,
+    source: 'Microsoft-Windows-User Profiles Service',
+    channel: 'Application',
+    severity: 'Warning',
+    skill_level: 'Beginner',
+    title: 'User Profile Registry Still In Use at Logoff',
+    short_desc: 'Windows could not cleanly unload a user\'s registry hive at logoff — can cause slow logins, profile corruption, and temporary profiles.',
+    description: 'Event ID 1530 from the User Profiles Service is generated when a user logs off but Windows cannot fully unload their registry hive (NTUSER.DAT) because one or more processes still have it open. Windows logs the offending processes in the event details. The immediate consequence is that the profile is not cleanly saved — on the next login, Windows may load a temporary profile instead of the user\'s real profile, causing the user to lose desktop settings, saved passwords, and application preferences. This event is responsible for the common support complaint: "all my settings are gone and my desktop is blank." Recurring Event 1530 means the offending process should be identified and addressed.',
+    why_it_happens: 'When a user logs off, Windows attempts to unload the user registry hive. If any process (antivirus, backup agent, indexing service, or a misbehaving application) still has a handle to any key in HKEY_CURRENT_USER, the unload fails. Windows proceeds with logoff but cannot flush the hive cleanly. Subsequent logins may find the hive locked and load a fresh temporary profile instead. Common offenders: antivirus real-time scanning, Outlook holding its profile key, Windows Search indexing, and background sync agents.',
+    what_good_looks_like: 'Occasional single occurrences (e.g., during a forced logoff) are low priority. Investigate: recurring Event 1530 for the same user, users reporting blank desktops or missing settings after login, or Event 1530 immediately before a user reports a "temporary profile" login.',
+    common_mistakes: [
+      'Rebuilding the user profile without first finding and fixing the root cause — Event 1530 will keep occurring',
+      'Not reading the event details — the offending process is listed in the event, which tells you exactly what to fix',
+      'Not restarting the offending service before attempting profile repair'
+    ],
+    causes: [
+      'Antivirus scanning NTUSER.DAT at logoff',
+      'Outlook or Office holding profile registry keys open',
+      'Windows Search (SearchIndexer) indexing the profile',
+      'Backup agent with handles to user registry',
+      'Application crashed and left handles open',
+      'Remote desktop session not cleanly terminated'
+    ],
+    steps: [
+      'Read the event details — it lists the process(es) holding the registry hive open',
+      'If it is antivirus: add NTUSER.DAT to the AV exclusion list, or configure the AV to release handles at logoff',
+      'If it is SearchIndexer: restart the Windows Search service or rebuild the index',
+      'If the user is already getting temporary profiles: copy their real profile data from C:\\Users\\<username>.bak',
+      'To force a clean profile copy: log in as admin, copy settings from the old profile to the new one',
+      'For recurring issue: use Process Monitor (Sysinternals) filtered to NTUSER.DAT to catch the offending process in real time'
+    ],
+    symptoms: [
+      'blank desktop after login',
+      'all settings gone',
+      'temporary profile',
+      'desktop is empty',
+      'profile not loading',
+      'settings reset after reboot',
+      'user profile error',
+      'slow login',
+      'my documents missing',
+      'preferences lost'
+    ],
+    tags: ['profile', 'registry', 'logoff', 'login', 'settings', 'temporary-profile', 'corruption'],
+    powershell: `# User Profile Registry Issue Investigation
+# Eventful
+
+# Recent profile unload failures
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'Microsoft-Windows-User Profiles Service'
+    Id           = 1530
+    StartTime    = (Get-Date).AddDays(-14)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# Check for temporary profiles loaded currently
+Get-WmiObject Win32_UserProfile |
+    Where-Object { $_.Special -eq $false } |
+    Select-Object LocalPath, Loaded, LastUseTime, Status |
+    Format-Table -AutoSize`,
+    related_ids: [1000],
+    ms_docs: 'https://learn.microsoft.com/en-us/troubleshoot/windows-client/user-profiles-and-logon/fix-user-profile-corrupted'
+  },
+
+  {
+    id: 1008,
+    source: 'Microsoft-Windows-Perflib',
+    channel: 'Application',
+    severity: 'Warning',
+    skill_level: 'Beginner',
+    title: 'Performance Counter Provider Error (Usually Harmless)',
+    short_desc: 'A performance counter provider returned an error. Appears constantly in most Application logs — almost always harmless noise.',
+    description: 'Event ID 1008 from Perflib (Performance Library) is generated when a performance counter provider — a component that feeds data to Performance Monitor, Task Manager, or third-party monitoring tools — returns an error or fails to respond. Like Event 10016 (DCOM), this event appears in nearly every Windows Application log and is almost never the cause of user-reported problems. Windows has many built-in performance counter providers; some are buggy or register but provide no data, generating 1008 continuously. The event names the provider that failed. In the vast majority of IT support cases, 1008 is background noise. It only warrants investigation if a monitoring tool or application that specifically uses performance counters is broken.',
+    why_it_happens: 'Third-party software installs performance counter providers during installation and sometimes fails to cleanly remove them on uninstall, leaving broken registrations. Windows built-in providers can also fail if the underlying service they monitor is not running. The Perflib subsystem logs 1008 whenever it calls a provider and gets back an unexpected error or timeout.',
+    what_good_looks_like: 'Present in virtually every Windows Application log — this is normal. Only investigate 1008 if: Performance Monitor or a monitoring application that uses perf counters is broken, or the named provider matches a recently uninstalled application.',
+    common_mistakes: [
+      'Assuming Event 1008 is causing the reported problem — it almost never is',
+      'Spending time rebuilding performance counters when the user\'s complaint is unrelated'
+    ],
+    causes: [
+      'Broken performance counter registration left by uninstalled software (expected after uninstalls)',
+      'Built-in provider for a service that is stopped or disabled',
+      'Corrupted performance counter database'
+    ],
+    steps: [
+      'Check if Event 1008 matches a recently uninstalled application — if so, ignore it',
+      'If Performance Monitor or monitoring tools are actually broken: rebuild perf counters',
+      'Rebuild performance counters: lodctr /r (run as admin from elevated command prompt)',
+      'If specific provider named: check if the associated service/application is installed and running',
+      'Otherwise: look elsewhere for the actual cause of the user\'s complaint'
+    ],
+    symptoms: [
+      'performance counter error',
+      'perflib error',
+      'lots of warnings in application log',
+      'event log warnings',
+      'performance monitor not working',
+      'task manager shows 0'
+    ],
+    tags: ['performance', 'perflib', 'noise', 'harmless', 'counter', 'warning', 'common'],
+    powershell: `# Performance Counter Error Summary
+# Eventful — Usually harmless. Check which provider is named.
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Application'
+    ProviderName = 'Microsoft-Windows-Perflib'
+    Id           = 1008
+    StartTime    = (Get-Date).AddDays(-1)
+} -ErrorAction SilentlyContinue |
+    Group-Object { ($_ | Select-Object -ExpandProperty Message).Substring(0, 80) } |
+    Select-Object Count, Name |
+    Sort-Object Count -Descending | Format-Table -AutoSize
+
+# Rebuild performance counters if actually needed
+# Run as admin: lodctr /r`,
+    related_ids: [1000],
+    ms_docs: null
   }
 ];
