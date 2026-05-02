@@ -156,7 +156,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 24px 80px;
+  padding: 24px 24px 48px;
+  overflow-y: auto;
 }
 
 .lookup-hero-inner {
@@ -233,10 +234,12 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* ─────────────────────────────────────────
    LAYOUT
 ───────────────────────────────────────── */
+[hidden] { display: none !important; }
+
 .layout {
   display: flex;
-  height: 100vh;
-  padding-top: var(--header-h);
+  flex: 1;
+  overflow: hidden;
 }
 
 /* ─────────────────────────────────────────
