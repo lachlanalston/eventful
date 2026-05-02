@@ -449,11 +449,21 @@ const SEVERITY_ORDER = { Critical: 0, Error: 1, Warning: 2, Info: 3, Verbose: 4 
 const tbl = {
   sortCol: 'timestamp', sortDir: 'asc',
   page: 0, pageSize: 100,
-  query: '', severities: new Set(), provider: '', channel: '',
+  query: '', severities: new Set(), providers: new Set(), channel: '',
   fromTime: '', toTime: '',
   hideNoisy: false,
   expandedIds: new Set(),
 };
+
+// Close provider dropdown when clicking outside (single persistent listener)
+document.addEventListener('click', e => {
+  const panel = document.getElementById('tbl-provider-panel');
+  const btn   = document.getElementById('tbl-provider-btn');
+  if (panel && !panel.hidden && !panel.contains(e.target) && !btn?.contains(e.target)) {
+    panel.hidden = true;
+    btn?.classList.remove('open');
+  }
+});
 
 // ── Event Table ───────────────────────────────────────────────────────────────
 function renderEventTable(events) {
@@ -462,7 +472,7 @@ function renderEventTable(events) {
   // Reset state
   Object.assign(tbl, {
     sortCol: 'timestamp', sortDir: 'asc', page: 0,
-    query: '', severities: new Set(), provider: '', channel: '',
+    query: '', severities: new Set(), providers: new Set(), channel: '',
     fromTime: '', toTime: '', hideNoisy: false,
     expandedIds: new Set(),
   });
@@ -487,10 +497,23 @@ function renderEventTable(events) {
           </label>`).join('')}
       </div>
 
-      <select id="tbl-provider" class="filter-control filter-control-select">
-        <option value="">All providers</option>
-        ${providers.map(p => `<option value="${esc(p)}">${esc(shortProvider(p))}</option>`).join('')}
-      </select>
+      <div class="provider-dropdown" id="tbl-provider-wrap">
+        <button class="provider-dropdown-btn" id="tbl-provider-btn" type="button">
+          <span id="tbl-provider-label">All providers</span>
+          <span class="provider-dropdown-arrow">▾</span>
+        </button>
+        <div class="provider-dropdown-panel" id="tbl-provider-panel" hidden>
+          ${providers.length > 6 ? `<input type="search" class="provider-search" id="tbl-provider-search" placeholder="Filter…" autocomplete="off" />` : ''}
+          <div class="provider-option-list">
+            ${providers.map(p => `
+              <label class="provider-option">
+                <input type="checkbox" class="provider-cb" value="${esc(p)}" />
+                <span class="provider-option-name" title="${esc(p)}">${esc(shortProvider(p))}</span>
+              </label>`).join('')}
+          </div>
+          <button class="provider-clear-btn" id="tbl-provider-clear" type="button" hidden>Clear</button>
+        </div>
+      </div>
 
       <select id="tbl-channel" class="filter-control filter-control-select">
         <option value="">All channels</option>
@@ -525,7 +548,51 @@ function renderEventTable(events) {
       redrawTable();
     });
   });
-  on('tbl-provider', 'change', e => { tbl.provider = e.target.value; tbl.page = 0; redrawTable(); });
+  // Provider multi-select dropdown
+  const providerBtn   = document.getElementById('tbl-provider-btn');
+  const providerPanel = document.getElementById('tbl-provider-panel');
+  const providerLabel = document.getElementById('tbl-provider-label');
+  const providerClear = document.getElementById('tbl-provider-clear');
+
+  providerBtn?.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = providerPanel.hidden;
+    providerPanel.hidden = !open;
+    providerBtn.classList.toggle('open', open);
+  });
+
+  function updateProviderLabel() {
+    const n = tbl.providers.size;
+    providerLabel.textContent = n === 0 ? 'All providers' : `${n} provider${n !== 1 ? 's' : ''}`;
+    providerBtn?.classList.toggle('filtered', n > 0);
+    if (providerClear) providerClear.hidden = n === 0;
+  }
+
+  $eventLogFiltersWrap.querySelectorAll('.provider-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) tbl.providers.add(cb.value);
+      else tbl.providers.delete(cb.value);
+      updateProviderLabel();
+      tbl.page = 0;
+      redrawTable();
+    });
+  });
+
+  providerClear?.addEventListener('click', e => {
+    e.stopPropagation();
+    tbl.providers.clear();
+    $eventLogFiltersWrap.querySelectorAll('.provider-cb').forEach(cb => cb.checked = false);
+    updateProviderLabel();
+    tbl.page = 0;
+    redrawTable();
+  });
+
+  on('tbl-provider-search', 'input', e => {
+    const q = e.target.value.toLowerCase();
+    $eventLogFiltersWrap.querySelectorAll('.provider-option').forEach(opt => {
+      opt.hidden = q ? !opt.querySelector('.provider-option-name').textContent.toLowerCase().includes(q) : false;
+    });
+  });
   on('tbl-channel',  'change', e => { tbl.channel  = e.target.value; tbl.page = 0; redrawTable(); });
   on('tbl-from',     'change', e => { tbl.fromTime = e.target.value; tbl.page = 0; redrawTable(); });
   on('tbl-to',       'change', e => { tbl.toTime   = e.target.value; tbl.page = 0; redrawTable(); });
@@ -548,7 +615,7 @@ function filteredSortedEvents() {
 
   let events = allParsedEvents.filter(e => {
     if (tbl.severities.size > 0 && !tbl.severities.has(e.severity)) return false;
-    if (tbl.provider && e.provider !== tbl.provider) return false;
+    if (tbl.providers.size > 0 && !tbl.providers.has(e.provider)) return false;
     if (tbl.channel  && e.channel  !== tbl.channel)  return false;
     if (fromMs !== null && e.timestamp < fromMs) return false;
     if (toMs   !== null && e.timestamp > toMs)   return false;
@@ -710,6 +777,9 @@ function buildTableRow(ev) {
   const keywordsDisplay = decodeKeywords(ev.keywords, ev.keywordNames);
   const sidDisplay      = decodeSid(ev.userSID);
   const count           = idCountMap.get(ev.id) || 1;
+  const nearbyCount     = allParsedEvents.filter(
+    e => e.recordId !== ev.recordId && Math.abs(e.timestamp - ev.timestamp) <= 30000
+  ).length;
 
   const metaFields = [
     ['Time (local)',    ev.timestamp.toLocaleString()],
@@ -757,7 +827,12 @@ function buildTableRow(ev) {
     <tr class="ev-detail-row">
       <td colspan="7">
         <div class="ev-detail-inner">
-          ${count > 1 ? `<div class="ev-occurrence-bar">Event ${ev.id} appears <strong>${count}×</strong> in this log</div>` : ''}
+          ${count > 1 || nearbyCount > 0 ? `
+          <div class="ev-occurrence-bar">
+            ${count > 1 ? `Event ${ev.id} appears <strong>${count}×</strong> in this log` : ''}
+            ${count > 1 && nearbyCount > 0 ? ' &nbsp;·&nbsp; ' : ''}
+            ${nearbyCount > 0 ? `<strong>${nearbyCount}</strong> other event${nearbyCount !== 1 ? 's' : ''} within ±30s` : ''}
+          </div>` : ''}
           ${messageHtml}
           <div class="ev-detail-meta">
             ${metaFields.map(([k, v]) => `
@@ -943,6 +1018,9 @@ function buildEventDetail(ev) {
   const anonData     = ev.dataAnon || [];
   const dataKeys     = Object.keys(ev.data || {});
   const count        = idCountMap.get(ev.id) || 1;
+  const nearbyCount  = allParsedEvents.filter(
+    e => e.recordId !== ev.recordId && Math.abs(e.timestamp - ev.timestamp) <= 30000
+  ).length;
   const decodedMsg   = decodeWinErrMsg(ev.message);
 
   const metaFields = [
@@ -971,7 +1049,12 @@ function buildEventDetail(ev) {
 
   return `
     <div class="ev-inline-detail">
-      ${count > 1 ? `<div class="ev-occurrence-bar">Event ${ev.id} fired <strong>${count}×</strong> in this log</div>` : ''}
+      ${count > 1 || nearbyCount > 0 ? `
+      <div class="ev-occurrence-bar">
+        ${count > 1 ? `Event ${ev.id} fired <strong>${count}×</strong> in this log` : ''}
+        ${count > 1 && nearbyCount > 0 ? ' &nbsp;·&nbsp; ' : ''}
+        ${nearbyCount > 0 ? `<strong>${nearbyCount}</strong> other event${nearbyCount !== 1 ? 's' : ''} within ±30s` : ''}
+      </div>` : ''}
       ${decodedMsg
         ? `<div class="ev-detail-message-wrap">
              <div class="ev-detail-message">${esc(decodedMsg)}</div>
