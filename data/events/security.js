@@ -1896,5 +1896,453 @@ Get-WinEvent -FilterHashtable @{
     Sort-Object TimeCreated -Descending | Format-List`,
     related_ids: [104, 4624, 4672],
     ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-1102'
+  },
+
+  {
+    id: 4946,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Intermediate',
+    title: 'Windows Firewall Rule Added',
+    short_desc: 'A rule was added to the Windows Firewall exception list — records who added it and what was allowed.',
+    description: 'Event 4946 is generated whenever a new rule is added to the Windows Firewall. It records the profile (Domain, Private, Public), the rule name, and the account that added it. This event is invaluable for auditing unauthorized firewall changes — if a user or malware adds an inbound allow rule to bypass security controls, this event captures it. On managed endpoints, firewall rules should only be changed by Group Policy or by authorized IT personnel; any unexpected 4946 is worth investigating.',
+    why_it_happens: 'Windows logs this event when any process or user with sufficient privilege adds a firewall rule via Windows Defender Firewall with Advanced Security, netsh advfirewall, PowerShell New-NetFirewallRule, or the Windows Firewall API. Malware and remote access tools often add inbound rules to maintain access.',
+    what_good_looks_like: 'Firewall rule additions should match known maintenance windows, software installations, or GPO pushes. Any rule added outside these windows or from an unexpected account needs investigation.',
+    common_mistakes: [
+      'Not auditing Windows Firewall changes at all — these events only appear if "Audit Policy Change" auditing is enabled',
+      'Not correlating 4946 with the process that created the rule — a rule added by cmd.exe or powershell.exe under a user account is suspicious',
+      'Missing that software installers routinely add firewall exceptions — checking the rule name often clarifies whether it is legitimate'
+    ],
+    causes: [
+      'Software installation adding a firewall exception for its service or port',
+      'Administrator manually adding an exception for a new application',
+      'Group Policy pushing a new firewall rule',
+      'Malware or unauthorized remote access tool adding an inbound allow rule',
+      'RMM tool or monitoring agent adding its required ports'
+    ],
+    steps: [
+      'Check the rule name in Event 4946 — legitimate software usually names rules clearly',
+      'Check the Subject Account Name — was it a service, an admin, or a user account?',
+      'Cross-reference with Event 4688 (process creation) at the same time to see which process added the rule',
+      'View the current rule: Get-NetFirewallRule -DisplayName "<rule name>" | Get-NetFirewallPortFilter',
+      'If the rule is unauthorized: Remove-NetFirewallRule -DisplayName "<rule name>"',
+      'Check for Event 4948 (rule deleted) to see if rules are being toggled on and off'
+    ],
+    symptoms: [
+      'firewall rule added',
+      'new firewall exception created',
+      'who added firewall rule',
+      'firewall change audit',
+      'firewall rule modification',
+      'unauthorized firewall rule',
+      'firewall exception added by software',
+      'malware added firewall rule',
+      'firewall rules changed',
+      'audit firewall changes'
+    ],
+    tags: ['firewall', 'audit', 'policy-change', 'security', 'network', 'rule'],
+    powershell: `# Firewall rule change audit
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Security'
+    Id      = @(4946, 4947, 4948, 4950)
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        EventId     = $_.Id
+        RuleName    = ($data | Where-Object Name -eq 'RuleName').'#text'
+        Account     = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4948, 4950, 4954, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4946'
+  },
+
+  {
+    id: 4948,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Windows Firewall Rule Deleted',
+    short_desc: 'A firewall rule was deleted — if it was a protective rule, this may open a security gap.',
+    description: 'Event 4948 is generated when a Windows Firewall rule is deleted. While adding rules (4946) is the typical concern for malware, deleting rules is equally important — an attacker may delete inbound block rules or outbound restriction rules to open communication channels. It is also common for misconfigured software uninstallers to delete firewall rules that were not theirs. The event records the rule name, profile, and the account that performed the deletion.',
+    why_it_happens: 'Rule deletion occurs via the Windows Firewall console, netsh advfirewall delete rule, Remove-NetFirewallRule in PowerShell, or the Windows Firewall API. Software uninstallers routinely delete their own rules, but deletion of rules named after security tools or baseline policies is suspicious.',
+    what_good_looks_like: 'Rule deletions matching software uninstallation events or known maintenance. Any deletion of a rule you do not recognize, or a deletion that correlates with suspicious activity, requires investigation.',
+    common_mistakes: [
+      'Not correlating with Event 4688 (process creation) to see which process deleted the rule',
+      'Not checking what the deleted rule was protecting against — some rules block known attack vectors',
+      'Assuming rule deletion is always benign because uninstallers delete rules routinely'
+    ],
+    causes: [
+      'Software uninstaller removing its own firewall exception',
+      'Administrator cleaning up stale firewall rules',
+      'Malware or attacker removing a blocking rule to open a port',
+      'Group Policy overwriting and removing locally-created rules'
+    ],
+    steps: [
+      'Check the rule name in Event 4948 — does the name correspond to known software?',
+      'Check the Subject Account Name — admin, service, or user account?',
+      'Cross-reference with software uninstall events (Event 1033 in Application log) at the same time',
+      'If the deleted rule protected an important service: recreate it: New-NetFirewallRule with appropriate parameters',
+      'Check if Event 4946 (rule added) follows 4948 closely — rules being replaced may indicate legitimate reconfiguration'
+    ],
+    symptoms: [
+      'firewall rule deleted',
+      'firewall rule removed',
+      'who deleted firewall rule',
+      'firewall rule missing',
+      'firewall exception removed',
+      'security rule deleted',
+      'firewall change',
+      'audit firewall deletion'
+    ],
+    tags: ['firewall', 'audit', 'policy-change', 'security', 'network', 'rule', 'deletion'],
+    powershell: `# Firewall rule deletion audit — last 7 days
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4948
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        RuleName    = ($data | Where-Object Name -eq 'RuleName').'#text'
+        Profile     = ($data | Where-Object Name -eq 'ProfileChanged').'#text'
+        Account     = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4946, 4950, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4948'
+  },
+
+  {
+    id: 4950,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Windows Firewall Setting Changed',
+    short_desc: 'A Windows Firewall setting was changed — could indicate the firewall was disabled, a profile was changed, or default action was modified.',
+    description: 'Event 4950 is generated when a Windows Firewall setting (not a rule, but a global setting) is changed. This includes changes to whether the firewall is enabled/disabled per profile, the default inbound/outbound action, notifications settings, or unicast responses to multicast. Disabling the Windows Firewall via this mechanism generates Event 4950. This is a higher-severity event than 4946/4948 because it affects the overall firewall posture rather than a single rule.',
+    why_it_happens: 'Firewall setting changes occur via the Windows Defender Firewall control panel, Group Policy, netsh advfirewall set, or the Windows Security Center API. Attackers and malware commonly disable the firewall entirely to simplify outbound communication.',
+    what_good_looks_like: 'No unexpected 4950 events. Firewall settings should only change during controlled maintenance or Group Policy updates. Any 4950 outside a maintenance window — especially if it shows the firewall being disabled — is a priority investigation.',
+    common_mistakes: [
+      'Not checking which setting changed — disabling the firewall vs enabling logging are very different severity levels',
+      'Not correlating with the account that made the change — user accounts should not be disabling the firewall'
+    ],
+    causes: [
+      'Administrator disabling the firewall for troubleshooting (and forgetting to re-enable it)',
+      'Group Policy changing firewall profile settings',
+      'Malware disabling the firewall to reduce detection or enable inbound connections',
+      'Software installation modifying firewall defaults'
+    ],
+    steps: [
+      'Read Event 4950 carefully to identify which setting changed',
+      'If the firewall was disabled: re-enable it immediately via Group Policy or Set-NetFirewallProfile -Enabled True',
+      'Check the Subject Account Name — who or what made the change?',
+      'Cross-reference with Event 4688 to identify the process that triggered the change',
+      'If firewall was disabled by non-admin: investigate for malware — check Event 4688 for suspicious process activity around the same time'
+    ],
+    symptoms: [
+      'windows firewall disabled',
+      'firewall turned off',
+      'firewall settings changed',
+      'who disabled the firewall',
+      'firewall profile changed',
+      'firewall configuration changed',
+      'windows firewall setting modified',
+      'firewall default action changed'
+    ],
+    tags: ['firewall', 'audit', 'security', 'policy-change', 'disabled', 'network'],
+    powershell: `# Firewall settings change audit and current state
+# Eventful
+
+# Current firewall state per profile
+Get-NetFirewallProfile | Select-Object Name, Enabled, DefaultInboundAction, DefaultOutboundAction
+
+# Firewall setting change events — last 7 days
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = @(4950, 4954)
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [4946, 4948, 4954],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4950'
+  },
+
+  {
+    id: 5140,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Intermediate',
+    title: 'Network Share Accessed',
+    short_desc: 'A network share was accessed — records who connected, from where, and which share.',
+    description: 'Event 5140 is generated when a user successfully connects to a network share. It records the account name, the source IP address, the share name, and the access type. This is a key event for auditing who is accessing shared folders on a file server or domain controller. On a DC, share access to ADMIN$, C$, or IPC$ from unexpected accounts or IPs is a significant security concern — these are common targets for lateral movement and credential theft tools like Mimikatz. Note: Object Access auditing must be enabled for this event to appear.',
+    why_it_happens: 'Windows logs this event when the SMB server service accepts a connection to a share. It fires on the server side, meaning the event appears on the file server being accessed, not on the client initiating the connection.',
+    what_good_looks_like: 'Share access matching expected file server activity. Investigate: access to ADMIN$ or C$ from workstations (administrative shares should only be accessed by IT), access outside business hours, access from unexpected source IPs, bulk access events from a single account.',
+    common_mistakes: [
+      'Not enabling Object Access auditing — Event 5140 requires "Audit File Share" auditing to be enabled under Advanced Audit Policy',
+      'Not checking the Share Name field — access to IPC$, ADMIN$, or C$ is much more significant than access to a named share',
+      'Not correlating source IP with a known device — source IP identifies the accessing machine'
+    ],
+    causes: [
+      'User accessing a file server share (normal operation)',
+      'IT admin connecting to ADMIN$ or C$ for remote management',
+      'Backup software accessing shares to back up data',
+      'Lateral movement — attacker using stolen credentials to access shares on other machines',
+      'Worm or ransomware scanning and accessing network shares'
+    ],
+    steps: [
+      'Confirm Audit File Share is enabled: secpol.msc → Advanced Audit Policy → Object Access → Audit File Share',
+      'Filter Security log for Event 5140',
+      'Note the Share Name — ADMIN$, C$, and IPC$ are high-value targets',
+      'Note the Source Address — which machine is connecting?',
+      'Correlate unexpected share access with Event 4624 (logon) at the same time — verify the logon type and source IP match',
+      'For suspicious lateral movement: check if the same source IP is accessing shares on multiple machines'
+    ],
+    symptoms: [
+      'who accessed shared folder',
+      'network share access audit',
+      'file share access log',
+      'who connected to file server',
+      'audit share access',
+      'who accessed admin share',
+      'network share audit trail',
+      'lateral movement file share',
+      'unauthorized share access',
+      'ransomware accessing shares'
+    ],
+    tags: ['share', 'audit', 'smb', 'file-server', 'lateral-movement', 'security', 'network'],
+    powershell: `# Network share access audit
+# Eventful
+# Note: Requires "Audit File Share" enabled in Advanced Audit Policy
+
+$startTime = (Get-Date).AddHours(-24)
+
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Security'
+    Id      = 5140
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated  = $_.TimeCreated
+        Account      = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+        ShareName    = ($data | Where-Object Name -eq 'ShareName').'#text'
+        SourceIP     = ($data | Where-Object Name -eq 'IpAddress').'#text'
+        AccessType   = ($data | Where-Object Name -eq 'AccessMask').'#text'
+    }
+} | Where-Object { $_.ShareName -notlike '*IPC*' } |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [5145, 4624, 4625, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-5140'
+  },
+
+  {
+    id: 5145,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Network Share File Access Check',
+    short_desc: 'A check was made to see if a client can access specific files or folders within a network share — high-volume but granular audit trail.',
+    description: 'Event 5145 is generated when Windows checks whether a client can access a specific file or folder within a network share. Where Event 5140 fires once per share connection, Event 5145 fires for each individual file or folder access check within that share. This means 5145 is extremely high-volume on active file servers — a user browsing a share generates hundreds of these events. Its value is forensic: when investigating a specific incident, 5145 tells you exactly which files were accessed or attempted, not just that the share was connected.',
+    why_it_happens: 'Every file or folder access within a network share is preceded by an access check. Windows Audit generates Event 5145 to record these checks for both successful and failed access (the failure case — "Access Denied" on a file within an accessible share — is particularly valuable for investigating unauthorized access attempts).',
+    what_good_looks_like: 'High volume is normal. Look for 5145 with "Access Denied" result (denied checks) for files the user should not be accessing, or bulk file access (hundreds of unique files in a short time window — ransomware indicator).',
+    common_mistakes: [
+      'Enabling 5145 on a busy file server without filtering — it will generate millions of events per day and overwhelm the Security log',
+      'Confusing 5145 volume (access checks) with 5140 (share connections) — they are different levels of granularity',
+      'Not filtering for failed access checks — success events are mostly noise, but Denied events pinpoint unauthorized access attempts'
+    ],
+    causes: [
+      'Normal file server access (high volume, expected)',
+      'Ransomware enumerating and accessing all files on a share (burst of access events across many files in seconds)',
+      'Data exfiltration — bulk file access by a single account',
+      'Unauthorized access attempt — access denied results on restricted folders'
+    ],
+    steps: [
+      'Enable Audit Detailed File Share under Advanced Audit Policy if 5145 events are not appearing',
+      'When investigating: filter 5145 for the specific account, IP, and time window',
+      'Look for "Access Denied" (failure) events — these reveal which files a user tried but failed to access',
+      'For ransomware investigation: count unique file paths accessed per minute — ransomware generates hundreds per second',
+      'Use Event 5140 first (share-level) to narrow down which share to investigate, then drill into 5145'
+    ],
+    symptoms: [
+      'which files were accessed on file server',
+      'file access audit',
+      'who accessed specific file',
+      'file server detailed audit',
+      'ransomware file access log',
+      'unauthorized file access',
+      'file access denied log',
+      'bulk file access audit',
+      'data exfiltration investigation',
+      'file access forensics'
+    ],
+    tags: ['share', 'audit', 'smb', 'file-access', 'forensics', 'security', 'ransomware'],
+    powershell: `# Detailed file share access — filter for denied checks or specific account
+# Eventful
+# Note: Very high volume on active servers — always filter by time and account
+
+$targetAccount = 'username'  # Replace with account to investigate
+$startTime     = (Get-Date).AddHours(-2)
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 5145
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    $acct = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+    if ($acct -like "*$targetAccount*") {
+        [PSCustomObject]@{
+            TimeCreated  = $_.TimeCreated
+            Account      = $acct
+            Share        = ($data | Where-Object Name -eq 'ShareName').'#text'
+            RelativePath = ($data | Where-Object Name -eq 'RelativeTargetName').'#text'
+            AccessMask   = ($data | Where-Object Name -eq 'AccessMask').'#text'
+        }
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [5140, 4624, 4625],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-5145'
+  },
+
+  {
+    id: 4103,
+    source: 'Microsoft-Windows-PowerShell',
+    channel: 'Microsoft-Windows-PowerShell/Operational',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'PowerShell: Module Logging — Command Executed',
+    short_desc: 'Records every PowerShell command and pipeline output when module logging is enabled — key for security investigations.',
+    description: 'Event 4103 is generated when PowerShell module logging is enabled and a PowerShell command or pipeline executes. It captures the full command input, the module name, and the output. Module logging provides visibility into PowerShell activity at the command level — including commands run by scripts, remote sessions, and constrained language mode bypasses. For security investigations, 4103 events reveal what commands an attacker or malware ran via PowerShell, even if the script attempted to evade detection. This log must be explicitly enabled via Group Policy or the registry.',
+    why_it_happens: 'Module logging is configured via Group Policy (Computer Configuration → Administrative Templates → Windows Components → Windows PowerShell → Turn on Module Logging) or the registry. When enabled, the PowerShell engine writes each command and its output to the Operational log.',
+    what_good_looks_like: 'In a security-conscious environment, 4103 provides an audit trail of all PowerShell activity. Focus investigation on: commands run outside business hours, commands run by unexpected accounts, commands accessing sensitive paths or registry locations, commands using encoded or obfuscated parameters.',
+    common_mistakes: [
+      'Enabling module logging without also enabling script block logging (4104) — both together give the most complete picture',
+      'Forgetting to enable module logging via GPO first — no 4103 events appear without it',
+      'Not filtering by account or time window — 4103 is very high-volume on busy systems'
+    ],
+    causes: [
+      'Any PowerShell command execution when module logging is enabled',
+      'PowerShell remoting commands (Enter-PSSession, Invoke-Command)',
+      'Scheduled tasks running PowerShell scripts',
+      'Malware using PowerShell as its execution engine'
+    ],
+    steps: [
+      'Enable module logging: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ModuleLogging → EnableModuleLogging = 1',
+      'Open Event Viewer → Applications and Services → Microsoft → Windows → PowerShell → Operational',
+      'Filter for Event ID 4103',
+      'When investigating: filter by account name and time window',
+      'Look for encoded commands: -EncodedCommand or [System.Convert]::FromBase64String — these are obfuscation red flags',
+      'Correlate with Event 4104 (script block logging) for the full script content'
+    ],
+    symptoms: [
+      'what powershell commands were run',
+      'powershell audit log',
+      'powershell command history audit',
+      'who ran powershell',
+      'powershell activity log',
+      'powershell security audit',
+      'powershell logging',
+      'investigate powershell commands',
+      'malware used powershell',
+      'powershell module logging'
+    ],
+    tags: ['powershell', 'audit', 'security', 'logging', 'module-logging', 'forensics'],
+    powershell: `# PowerShell module logging — recent commands
+# Eventful
+# Note: Requires module logging enabled via GPO or registry
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Microsoft-Windows-PowerShell/Operational'
+    Id           = 4103
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, UserId, Message |
+    Sort-Object TimeCreated -Descending |
+    Select-Object -First 50 | Format-List`,
+    related_ids: [4104, 4688, 4624],
+    ms_docs: 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_logging_windows'
+  },
+
+  {
+    id: 4104,
+    source: 'Microsoft-Windows-PowerShell',
+    channel: 'Microsoft-Windows-PowerShell/Operational',
+    severity: 'Warning',
+    skill_level: 'Advanced',
+    title: 'PowerShell: Script Block Logging — Script Content Captured',
+    short_desc: 'The full text of a PowerShell script block was logged — critical for investigating what malicious or suspicious scripts actually contained.',
+    description: 'Event 4104 captures the complete text of PowerShell script blocks as they are compiled — including dynamically constructed scripts, obfuscated payloads that have been decoded, and commands passed via -EncodedCommand (PowerShell automatically decodes and logs the plaintext). This makes 4104 the most powerful PowerShell security event: even heavily obfuscated malware reveals its true content in the 4104 log. Windows automatically logs 4104 for script blocks containing suspicious keywords (like Invoke-Mimikatz, Invoke-WebRequest to unusual URLs, etc.) regardless of whether full script block logging is enabled. Full logging captures everything.',
+    why_it_happens: 'Script block logging is enabled via Group Policy or the registry. Windows also has automatic "suspicious script detection" that generates 4104 warnings for script content matching known attack patterns — these appear even without full logging being enabled, which is why 4104 sometimes appears without 4103.',
+    what_good_looks_like: 'In a well-defended environment, 4104 is enabled for all PowerShell execution. Severity Warning events (Windows automatically flagged the content as suspicious) need immediate attention. Look for: encoded command decodes, calls to Invoke-Expression or iex, downloads from the internet (Invoke-WebRequest, System.Net.WebClient), reflection and memory injection patterns.',
+    common_mistakes: [
+      'Not enabling script block logging, relying only on module logging (4103) — 4103 shows commands but not full script content',
+      'Ignoring Warning-level 4104 events that Windows automatically generated — these are pre-filtered for suspicious content',
+      'Not checking that the decoded content of -EncodedCommand is visible in the 4104 body — PowerShell decodes before logging'
+    ],
+    causes: [
+      'Any PowerShell script execution when script block logging is enabled',
+      'Automatically generated by Windows when script content matches suspicious patterns (even without full logging)',
+      'PowerShell-based malware, fileless malware, or post-exploitation frameworks (Cobalt Strike, Metasploit)',
+      'Legitimate administrative scripts (high volume)'
+    ],
+    steps: [
+      'Enable full script block logging: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging → EnableScriptBlockLogging = 1',
+      'Filter Event Viewer for 4104 with Level = Warning — Windows pre-flagged these as suspicious',
+      'Read the script block content in the event body — look for encoded strings, web downloads, and injection patterns',
+      'Cross-reference the User SID and timestamp with Event 4624 (logon) to establish who ran the script',
+      'If malicious content found: run a full EDR/AV scan immediately and investigate the account for compromise',
+      'Combine with 4103 events to reconstruct the full execution context'
+    ],
+    symptoms: [
+      'what did powershell script do',
+      'powershell script content',
+      'malicious powershell script',
+      'powershell script block logging',
+      'investigate powershell script',
+      'powershell obfuscated command',
+      'encoded powershell command',
+      'powershell malware investigation',
+      'fileless malware powershell',
+      'powershell script captured',
+      'invoke-expression powershell audit',
+      'cobalt strike powershell'
+    ],
+    tags: ['powershell', 'security', 'logging', 'script-block', 'malware', 'forensics', 'advanced'],
+    powershell: `# PowerShell script block logging — recent and suspicious entries
+# Eventful
+# Note: Requires script block logging enabled. Warning-level events appear automatically for suspicious content.
+
+# Warning-level 4104 events (auto-flagged as suspicious by Windows)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Microsoft-Windows-PowerShell/Operational'
+    Id           = 4104
+    Level        = 3   # 3 = Warning
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, UserId, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# All 4104 events (requires full script block logging enabled)
+# Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-PowerShell/Operational'; Id = 4104; StartTime = (Get-Date).AddDays(-1) } -ErrorAction SilentlyContinue | Select-Object TimeCreated, UserId, Message | Sort-Object TimeCreated -Descending | Select-Object -First 20 | Format-List`,
+    related_ids: [4103, 4688, 4624, 4625],
+    ms_docs: 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_logging_windows'
   }
 ];

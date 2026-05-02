@@ -2625,5 +2625,124 @@ Get-WinEvent -FilterHashtable @{
     Sort-Object TimeCreated -Descending | Format-List`,
     related_ids: [1102],
     ms_docs: null
+  },
+
+  {
+    id: 19,
+    source: 'Microsoft-Windows-WindowsUpdateClient',
+    channel: 'System',
+    severity: 'Info',
+    skill_level: 'Fundamental',
+    title: 'Windows Update Installed Successfully',
+    short_desc: 'A Windows Update or patch installed without error — records the KB number and update title.',
+    description: 'Event 19 from WindowsUpdateClient is logged when a Windows Update installs successfully. It records the KB article number and the full update title. This is the "all clear" counterpart to Event 20 (installation failure). Its value is audit and timeline: confirming when a specific patch was installed, verifying that a KB required by a vendor was actually applied, or determining what changed on a system before a problem started. Checking whether a system problem started immediately after a specific Event 19 is a core troubleshooting technique.',
+    why_it_happens: 'Windows Update client writes Event 19 to the System log when the installation phase of an update completes successfully. Note that some updates require a reboot to finalize — Event 19 fires when the installation is queued successfully, not necessarily when the reboot-required finalization occurs.',
+    what_good_looks_like: 'Regular Event 19 entries reflecting monthly Patch Tuesday updates. Correlate with Event 20 (failures) — if updates frequently fail and occasionally succeed, the underlying failure cause is still present.',
+    common_mistakes: [
+      'Assuming Event 19 means the update is fully applied — some updates need a reboot to complete (check for pending reboot indicators)',
+      'Not checking whether a problem started immediately after a specific KB installed — Event 19 timestamps are the key',
+      'Looking in the Application log for Windows Update events — they appear in the System log'
+    ],
+    causes: [
+      'Monthly Patch Tuesday cumulative update installed',
+      'Out-of-band security hotfix installed',
+      'Driver update delivered via Windows Update',
+      'Feature update installed'
+    ],
+    steps: [
+      'Filter System log for Event 19 to see update installation history',
+      'To check if a specific KB is installed: Get-HotFix -Id KB<number>',
+      'If troubleshooting a regression: find Event 19 entries before the problem started to identify candidate KBs',
+      'To uninstall a suspect KB: wusa /uninstall /kb:<number> — only as a last resort with vendor guidance',
+      'For a complete update history: Get-WinEvent with provider WindowsUpdateClient IDs 19, 20, 43'
+    ],
+    symptoms: [
+      'which updates installed',
+      'windows update history',
+      'when was patch installed',
+      'kb installed successfully',
+      'update installed log',
+      'patch tuesday history',
+      'what updates were applied',
+      'check windows update log',
+      'confirm patch installed',
+      'windows update audit'
+    ],
+    tags: ['windows-update', 'patch', 'installation', 'success', 'kb', 'maintenance'],
+    powershell: `# Windows Update installation history
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-WindowsUpdateClient'
+    Id           = @(19, 20, 43)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $type = switch ($_.Id) {
+        19 { 'SUCCESS' }
+        20 { 'FAILURE' }
+        43 { 'STARTED' }
+    }
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        Result      = $type
+        Update      = $_.Message -replace '^.*?update: ', '' -replace '\r?\n.*', ''
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [20, 43],
+    ms_docs: null
+  },
+
+  {
+    id: 43,
+    source: 'Microsoft-Windows-WindowsUpdateClient',
+    channel: 'System',
+    severity: 'Info',
+    skill_level: 'Fundamental',
+    title: 'Windows Update Installation Started',
+    short_desc: 'Windows Update began installing an update — useful for correlating a system change or performance impact with a specific update.',
+    description: 'Event 43 from WindowsUpdateClient records when Windows Update begins installing a specific update. It captures the KB number and update title at the moment installation starts. This event is valuable for two investigations: first, if a system experienced a performance issue, reboot, or behavioral change, correlating that time with nearby Event 43 entries often reveals which update triggered it. Second, if an update appears stuck, Event 43 without a following Event 19 (success) indicates the installation started but never completed.',
+    why_it_happens: 'Windows Update client writes Event 43 to the System log when it begins the installation phase of an update, after the download phase has completed. This is the first marker in the installation timeline; Event 19 (success) or Event 20 (failure) follow when installation completes.',
+    what_good_looks_like: 'Every Event 43 should be followed by Event 19 (success) or Event 20 (failure) within a reasonable timeframe. A lone Event 43 with no following event may indicate the update installation hung or was interrupted by a shutdown.',
+    common_mistakes: [
+      'Not checking whether Event 43 is followed by Event 19 or 20 — a lone 43 means the installation did not complete',
+      'Not correlating system instability or reboots with Event 43 timestamps'
+    ],
+    causes: [
+      'Windows Update service beginning scheduled patch installation',
+      'Manually triggered update installation from Settings',
+      'WSUS or SCCM pushing an update to the machine'
+    ],
+    steps: [
+      'Filter System log for Event 43 to see when specific updates started installing',
+      'Check if a following Event 19 or 20 appears — if no follow-up event, the installation was interrupted',
+      'Correlate Event 43 timestamps with any incident or performance change reported by users',
+      'For a hung installation: check if there is a pending reboot preventing updates from completing'
+    ],
+    symptoms: [
+      'update started installing',
+      'when did update start',
+      'patch install started',
+      'windows update started',
+      'update installation started',
+      'kb started installing',
+      'patch installation log'
+    ],
+    tags: ['windows-update', 'patch', 'installation', 'started', 'kb', 'maintenance'],
+    powershell: `# Windows Update install started and result history
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'System'
+    ProviderName = 'Microsoft-Windows-WindowsUpdateClient'
+    Id           = @(19, 20, 43)
+    StartTime    = (Get-Date).AddDays(-30)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id,
+        @{N='Result'; E={ switch($_.Id){ 19{'SUCCESS'} 20{'FAILURE'} 43{'STARTED'} }}},
+        @{N='Update'; E={ $_.Message -replace '^.*?update: ','' -replace '\r?\n.*','' }} |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [19, 20],
+    ms_docs: null
   }
 ];
