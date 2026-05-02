@@ -27,6 +27,7 @@ const $resultsSub         = document.getElementById('results-sub');
 
 // ── State ─────────────────────────────────────────────────────────────────────
 let allParsedEvents = [];
+let idCountMap      = new Map(); // eventId → occurrence count in loaded file
 
 // ── File Upload ───────────────────────────────────────────────────────────────
 $fileInput?.addEventListener('change', e => {
@@ -75,6 +76,8 @@ async function processFile(file) {
 
     const analysis = analyzeEvents(events);
     allParsedEvents = events;
+    idCountMap = new Map();
+    for (const ev of events) idCountMap.set(ev.id, (idCountMap.get(ev.id) || 0) + 1);
 
     showProcessing('Building report…');
     await yieldToUI();
@@ -105,6 +108,7 @@ function showProcessing(text) {
 
 function resetToUpload() {
   allParsedEvents = [];
+  idCountMap      = new Map();
   if ($fileInput) $fileInput.value = '';
   showSection($uploadSection);
 }
@@ -248,6 +252,27 @@ function renderIncidents(incidents) {
       const isOpen = !detail.hidden;
       detail.hidden = isOpen;
       if (chevron) chevron.textContent = isOpen ? '▶' : '▼';
+    });
+  });
+
+  // Wire advanced toggles inside inline event details
+  $incidentsSection.querySelectorAll('.ev-advanced-toggle').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const section = btn.closest('.ev-inline-detail').querySelector('.ev-advanced-section');
+      const open = section.classList.toggle('ev-advanced-open');
+      btn.textContent = open ? 'Advanced ▲' : 'Advanced ▼';
+    });
+  });
+
+  // Wire copy buttons inside inline event details
+  $incidentsSection.querySelectorAll('.ev-copy-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      navigator.clipboard?.writeText(btn.dataset.copy).then(() => {
+        btn.classList.add('copied');
+        setTimeout(() => btn.classList.remove('copied'), 2000);
+      });
     });
   });
 
@@ -646,6 +671,17 @@ function redrawTable() {
       btn.textContent = open ? 'Advanced ▲' : 'Advanced ▼';
     });
   });
+
+  // Copy button (message clipboard)
+  $eventTableWrap.querySelectorAll('.ev-copy-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      navigator.clipboard?.writeText(btn.dataset.copy).then(() => {
+        btn.classList.add('copied');
+        setTimeout(() => btn.classList.remove('copied'), 2000);
+      });
+    });
+  });
 }
 
 function buildTableRow(ev) {
@@ -669,11 +705,11 @@ function buildTableRow(ev) {
 
   if (!isExpanded) return mainRow;
 
-  const taskDisplay    = ev.taskName    || ev.task    || null;
-  const opcodeDisplay  = ev.opcodeName  || ev.opcode  || null;
-  const keywordsDisplay = ev.keywordNames?.length
-    ? ev.keywordNames.join(', ')
-    : (ev.keywords || null);
+  const taskDisplay     = ev.taskName || ev.task || null;
+  const opcodeDisplay   = decodeOpcode(ev.opcode, ev.opcodeName);
+  const keywordsDisplay = decodeKeywords(ev.keywords, ev.keywordNames);
+  const sidDisplay      = decodeSid(ev.userSID);
+  const count           = idCountMap.get(ev.id) || 1;
 
   const metaFields = [
     ['Time (local)',    ev.timestamp.toLocaleString()],
@@ -682,7 +718,7 @@ function buildTableRow(ev) {
     ['Channel',         ev.channel],
     ['Computer',        ev.computer],
     ['Record ID',       ev.recordId || null],
-    ['User SID',        ev.userSID],
+    ['User SID',        sidDisplay],
     ['Process ID',      ev.processId || null],
     ['Thread ID',       ev.threadId || null],
     ['Activity ID',     ev.activityId],
@@ -702,8 +738,14 @@ function buildTableRow(ev) {
     ['Provider Desc.',   ev.providerDescription],
   ].filter(([, v]) => v);
 
-  const messageHtml = ev.message
-    ? `<div class="ev-detail-message">${esc(ev.message)}</div>`
+  const decodedMsg = decodeWinErrMsg(ev.message);
+  const messageHtml = decodedMsg
+    ? `<div class="ev-detail-message-wrap">
+        <div class="ev-detail-message">${esc(decodedMsg)}</div>
+        <button class="ev-copy-btn" data-copy="${esc(ev.message)}" title="Copy message">
+          <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        </button>
+       </div>`
     : `<div class="ev-detail-message ev-no-message">
         Message not rendered — Windows message templates are stored on the source machine.
         Export directly from the affected computer to see full event messages.
@@ -715,6 +757,7 @@ function buildTableRow(ev) {
     <tr class="ev-detail-row">
       <td colspan="7">
         <div class="ev-detail-inner">
+          ${count > 1 ? `<div class="ev-occurrence-bar">Event ${ev.id} appears <strong>${count}×</strong> in this log</div>` : ''}
           ${messageHtml}
           <div class="ev-detail-meta">
             ${metaFields.map(([k, v]) => `
@@ -893,48 +936,86 @@ function buildPanelContent(id, dbEntry, rawMatches) {
 }
 
 function buildEventDetail(ev) {
-  const taskDisp   = ev.taskName   || ev.task   || null;
-  const opcodeDisp = ev.opcodeName || ev.opcode || null;
-  const kwDisp     = ev.keywordNames?.length ? ev.keywordNames.join(', ') : (ev.keywords || null);
-  const anonData   = ev.dataAnon || [];
-  const dataKeys   = Object.keys(ev.data || {});
+  const taskDisp     = ev.taskName || ev.task || null;
+  const opcodeDisp   = decodeOpcode(ev.opcode, ev.opcodeName);
+  const kwDisp       = decodeKeywords(ev.keywords, ev.keywordNames);
+  const sidDisp      = decodeSid(ev.userSID);
+  const anonData     = ev.dataAnon || [];
+  const dataKeys     = Object.keys(ev.data || {});
+  const count        = idCountMap.get(ev.id) || 1;
+  const decodedMsg   = decodeWinErrMsg(ev.message);
+
+  const metaFields = [
+    ['Time (local)',    ev.timestamp.toLocaleString()],
+    ['Time (UTC)',      ev.timestamp.toISOString()],
+    ['Provider',        ev.provider],
+    ['Channel',         ev.channel],
+    ['Computer',        ev.computer],
+    ['Record ID',       ev.recordId || null],
+    ['User SID',        sidDisp],
+    ['Process ID',      ev.processId || null],
+    ['Thread ID',       ev.threadId || null],
+    ['Activity ID',     ev.activityId],
+    ['Task',            taskDisp],
+    ['Opcode',          opcodeDisp],
+    ['Keywords',        kwDisp],
+  ].filter(([, v]) => v);
+
+  const advancedFields = [
+    ['Raw Level',    String(ev.levelNum)],
+    ['Raw Task',     ev.task],
+    ['Raw Opcode',   ev.opcode],
+    ['Raw Keywords', ev.keywords],
+    ['Version',      ev.version],
+  ].filter(([, v]) => v);
 
   return `
     <div class="ev-inline-detail">
-      <div class="lp-raw-fields">
-        ${lpField('Time', ev.timestamp.toLocaleString())}
-        ${lpField('Severity', `<span class="sev-badge sev-badge-${ev.severity.toLowerCase()}">${ev.severity}</span>`)}
-        ${lpField('Provider', esc(ev.provider || '—'))}
-        ${lpField('Channel', esc(ev.channel || '—'))}
-        ${ev.computer   ? lpField('Computer',   esc(ev.computer))        : ''}
-        ${ev.recordId   ? lpField('Record ID',  String(ev.recordId))     : ''}
-        ${ev.processId  ? lpField('Process ID', String(ev.processId))    : ''}
-        ${ev.userSID    ? lpField('User SID',   esc(ev.userSID))         : ''}
-        ${taskDisp      ? lpField('Task',       esc(taskDisp))           : ''}
-        ${opcodeDisp    ? lpField('Opcode',     esc(opcodeDisp))         : ''}
-        ${kwDisp        ? lpField('Keywords',   esc(kwDisp))             : ''}
-      </div>
-      <div class="lp-raw-message-label">Message</div>
-      ${ev.message
-        ? `<div class="lp-raw-message">${esc(ev.message)}</div>`
-        : `<div class="lp-raw-message lp-no-message">Message not rendered — Windows message templates are stored on the source machine. Export from the affected computer to see full messages.</div>`}
-      ${dataKeys.length || anonData.length ? `
-        <div class="lp-raw-message-label">Event Data</div>
-        <div class="lp-raw-data">
+      ${count > 1 ? `<div class="ev-occurrence-bar">Event ${ev.id} fired <strong>${count}×</strong> in this log</div>` : ''}
+      ${decodedMsg
+        ? `<div class="ev-detail-message-wrap">
+             <div class="ev-detail-message">${esc(decodedMsg)}</div>
+             <button class="ev-copy-btn" data-copy="${esc(ev.message)}" title="Copy message">
+               <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+             </button>
+           </div>`
+        : `<div class="ev-detail-message ev-no-message">Message not rendered — Windows message templates are stored on the source machine. Export from the affected computer to see full messages.</div>`}
+      <div class="ev-inline-grid">
+        <div class="ev-detail-meta">
+          ${metaFields.map(([k, v]) => `
+            <div class="ev-detail-field">
+              <span class="ev-detail-key">${k}</span>
+              <span class="ev-detail-val">${esc(String(v))}</span>
+            </div>`).join('')}
+        </div>
+        ${dataKeys.length || anonData.length ? `
+        <div class="ev-detail-data">
+          <div class="ev-detail-data-title">Event Data</div>
           ${dataKeys.map(k => `
-            <div class="lp-raw-data-row">
-              <span class="lp-raw-data-key">${esc(k)}</span>
-              <span class="lp-raw-data-val">${esc(String(ev.data[k]))}</span>
+            <div class="ev-detail-data-row">
+              <span class="ev-detail-data-key">${esc(k)}</span>
+              <span class="ev-detail-data-val">${esc(String(ev.data[k]))}</span>
             </div>`).join('')}
           ${anonData.map((v, i) => `
-            <div class="lp-raw-data-row">
-              <span class="lp-raw-data-key lp-raw-data-key--anon">[${i}]</span>
-              <span class="lp-raw-data-val">${esc(String(v))}</span>
+            <div class="ev-detail-data-row">
+              <span class="ev-detail-data-key ev-detail-data-key--anon">[${i}]</span>
+              <span class="ev-detail-data-val">${esc(String(v))}</span>
             </div>`).join('')}
         </div>` : ''}
+      </div>
       <div class="ev-detail-actions">
         <span class="ev-detail-lookup-btn" data-lookup-id="${ev.id}">Look up Event ${ev.id} →</span>
+        ${advancedFields.length ? `<button class="ev-advanced-toggle">Advanced ▼</button>` : ''}
       </div>
+      ${advancedFields.length ? `
+      <div class="ev-advanced-section">
+        <div class="ev-detail-data-title">Advanced / Raw</div>
+        ${advancedFields.map(([k, v]) => `
+          <div class="ev-detail-field">
+            <span class="ev-detail-key">${k}</span>
+            <span class="ev-detail-val">${esc(String(v))}</span>
+          </div>`).join('')}
+      </div>` : ''}
     </div>`;
 }
 
@@ -944,6 +1025,79 @@ function lpField(label, value) {
       <span class="lp-raw-key">${label}</span>
       <span class="lp-raw-val">${value}</span>
     </div>`;
+}
+
+// ── Event Detail Decoders ─────────────────────────────────────────────────────
+
+const KNOWN_SIDS = {
+  'S-1-1-0':      'Everyone',
+  'S-1-5-7':      'Anonymous',
+  'S-1-5-18':     'SYSTEM',
+  'S-1-5-19':     'LOCAL SERVICE',
+  'S-1-5-20':     'NETWORK SERVICE',
+  'S-1-5-32-544': 'Administrators',
+  'S-1-5-32-545': 'Users',
+  'S-1-5-32-546': 'Guests',
+};
+
+function decodeSid(sid) {
+  if (!sid) return null;
+  const name = KNOWN_SIDS[sid];
+  return name ? `${name} (${sid})` : sid;
+}
+
+const WIN_ERRORS = {
+  2:    'The system cannot find the file specified',
+  3:    'The system cannot find the path specified',
+  5:    'Access is denied',
+  32:   'The process cannot access the file because it is being used by another process',
+  1053: 'The service did not respond to the start or control request in a timely fashion',
+  1055: 'The service database is locked',
+  1056: 'An instance of the service is already running',
+  1058: 'The service cannot be started — it is disabled or has no enabled devices associated with it',
+  1060: 'The specified service does not exist as an installed service',
+  1061: 'The service cannot accept control messages at this time',
+  1067: 'The process terminated unexpectedly',
+  1068: 'The dependency service or group failed to start',
+  1069: 'The service did not start due to a logon failure',
+  1072: 'The specified service has been marked for deletion',
+  1073: 'The specified service already exists',
+  1326: 'Logon failure: unknown user name or bad password',
+};
+
+function decodeWinErrMsg(msg) {
+  if (!msg) return msg;
+  return msg.replace(/%%(\d+)/g, (m, n) => {
+    const txt = WIN_ERRORS[+n];
+    return txt ? `${txt} (%%${n})` : m;
+  });
+}
+
+const OPCODE_MAP = {
+  '0': 'Info', '1': 'Start', '2': 'Stop', '3': 'DC Start',
+  '4': 'DC Stop', '5': 'Extension', '6': 'Reply', '7': 'Resume',
+  '8': 'Suspend', '9': 'Send', '240': 'Disconnect', '241': 'Connect',
+};
+
+function decodeOpcode(raw, name) {
+  if (name) return name;
+  if (raw == null || raw === '') return null;
+  return OPCODE_MAP[String(raw)] || String(raw);
+}
+
+const KEYWORD_MAP = {
+  '0x8000000000000000': 'Audit Failure',
+  '0x4000000000000000': 'Audit Success',
+  '0x8080000000000000': 'Classic, Audit Failure',
+  '0x4080000000000000': 'Classic, Audit Success',
+  '0x0080000000000000': 'Classic',
+  '0x0000000000000000': 'None',
+};
+
+function decodeKeywords(raw, names) {
+  if (names?.length) return names.join(', ');
+  if (!raw) return null;
+  return KEYWORD_MAP[raw.toLowerCase()] ?? raw;
 }
 
 // ── Error Display ─────────────────────────────────────────────────────────────
