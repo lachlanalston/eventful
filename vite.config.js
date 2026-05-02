@@ -6,9 +6,10 @@ export default defineConfig({
     outDir: 'docs',
     rollupOptions: {
       input: {
-        home:     'index.html',
-        results:  'results.html',
-        analyzer: 'analyzer.html',
+        home:               'index.html',
+        eventLookup:        'event-lookup.html',
+        windowsLogAnalyzer: 'windows-log-analyzer.html',
+        macosLogAnalyzer:   'macos-log-analyzer.html',
       }
     }
   }

@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Incident Analyzer — Eventful</title>
-  <meta name="description" content="Upload Windows Event Viewer XML logs for instant root cause analysis. Identifies crash patterns, correlates events, and suggests next steps." />
+  <title>Windows Log Analyzer — Eventful</title>
+  <meta name="description" content="Upload Windows Event Viewer XML logs to analyze patterns, correlate events, and surface root causes." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/analyzer-DJ_plpj9.js"></script>
+  <script type="module" crossorigin src="./assets/windowsLogAnalyzer-CSj5C-_P.js"></script>
   <link rel="modulepreload" crossorigin href="./assets/theme-gEBc2EcC.js">
   <link rel="modulepreload" crossorigin href="./assets/index-xfVKLF0W.js">
   <link rel="stylesheet" crossorigin href="./assets/analyzer-BsN00nQy.css">
@@ -18,8 +18,9 @@
     <a href="index.html" class="app-logo">Eventful</a>
     <div class="header-divider"></div>
     <nav class="app-nav">
-      <a href="results.html" class="nav-link">Event Lookup</a>
-      <a href="analyzer.html" class="nav-link active">Incident Analyzer</a>
+      <a href="event-lookup.html" class="nav-link">Event Lookup</a>
+      <a href="windows-log-analyzer.html" class="nav-link active">Windows Log Analyzer</a>
+      <a href="macos-log-analyzer.html" class="nav-link">macOS Log Analyzer</a>
     </nav>
     <div class="header-right">
       <button class="theme-btn" title="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
@@ -30,9 +31,9 @@
   <div id="upload-section" class="upload-section">
     <div class="upload-hero">
       <span class="upload-hero-icon"><svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
-      <h1>Incident Analyzer</h1>
+      <h1>Windows Log Analyzer</h1>
       <p class="upload-hero-sub">
-        Correlates Windows event logs to surface root causes and remediation steps.
+        Upload Windows event logs to correlate events, surface root causes, and find remediation steps.
       </p>
 
       <div class="drop-zone" id="drop-zone">

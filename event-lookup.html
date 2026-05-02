@@ -3,13 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Results — Eventful</title>
+  <title>Event Lookup — Eventful</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/results-UiTrEF7o.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/theme-gEBc2EcC.js">
-  <link rel="modulepreload" crossorigin href="./assets/index-xfVKLF0W.js">
-  <link rel="stylesheet" crossorigin href="./assets/results-Dfarl9Gh.css">
+  <link rel="stylesheet" href="results.css" />
 </head>
 <body>
 
@@ -18,8 +15,9 @@
     <a href="index.html" class="app-logo">Eventful</a>
     <div class="header-divider"></div>
     <nav class="app-nav">
-      <a href="results.html" class="nav-link active">Event Lookup</a>
-      <a href="analyzer.html" class="nav-link">Incident Analyzer</a>
+      <a href="event-lookup.html" class="nav-link active">Event Lookup</a>
+      <a href="windows-log-analyzer.html" class="nav-link">Windows Log Analyzer</a>
+      <a href="macos-log-analyzer.html" class="nav-link">macOS Log Analyzer</a>
     </nav>
     <div class="app-search-wrap">
       <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -34,10 +32,10 @@
     <aside class="sidebar">
       <div id="count" class="result-count"></div>
       <div id="list" class="result-list"></div>
-      <a href="analyzer.html" class="sidebar-analyzer-cta">
+      <a href="windows-log-analyzer.html" class="sidebar-analyzer-cta">
         <div class="sac-text">
-          <strong>Incident Analyzer</strong>
-          <span>Correlate event logs →</span>
+          <strong>Windows Log Analyzer</strong>
+          <span>Analyze event logs →</span>
         </div>
       </a>
     </aside>
@@ -50,5 +48,6 @@
 
   </div>
 
+  <script type="module" src="assets/js/results.js"></script>
 </body>
 </html>

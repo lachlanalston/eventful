@@ -64,6 +64,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   flex-shrink: 0;
   text-decoration: none;
 }
+.app-logo:hover { opacity: 0.85; }
 
 .header-divider {
   width: 1px;

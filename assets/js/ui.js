@@ -187,7 +187,7 @@ function buildEventCard(event, onRelatedClick) {
     <div class="analyzer-hint-strip">
       <span class="ahs-icon">🔬</span>
       <span class="ahs-text">This event commonly appears in crash &amp; incident logs.</span>
-      <a href="analyzer.html" class="ahs-link">Analyze a log file →</a>
+      <a href="windows-log-analyzer.html" class="ahs-link">Analyze a log file →</a>
     </div>
     ` : ''}
 
