@@ -3,13 +3,13 @@
    and rendering of results.
 ──────────────────────────────────────────────────────────────────────────── */
 
-import { parseEventXML, clusterEvents } from './parser.js';
+import { parseEventXML } from './parser.js';
 import { analyzeEvents } from './correlator.js';
-import { initTheme, toggleTheme } from './theme.js';
+import { setupTheme } from './theme.js';
 import { allEvents } from '../../data/events/index.js';
+import { escHtml, formatTime } from './utils.js';
 
-initTheme();
-document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', toggleTheme));
+setupTheme();
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const $uploadSection      = document.getElementById('upload-section');
@@ -302,8 +302,8 @@ function renderIncidentCard(inc, index) {
             <div class="incident-title">${sig?.name ?? anchorTitle(anchor)}</div>
             <div class="incident-meta">
               <span class="incident-time">${anchor.timestamp.toLocaleString()}</span>
-              <span class="incident-provider">${esc(anchor.provider)}</span>
-              ${report.confidenceReason ? `<span class="conf-reason">${esc(report.confidenceReason)}</span>` : ''}
+              <span class="incident-provider">${escHtml(anchor.provider)}</span>
+              ${report.confidenceReason ? `<span class="conf-reason">${escHtml(report.confidenceReason)}</span>` : ''}
             </div>
           </div>
         </div>
@@ -320,13 +320,13 @@ function renderIncidentCard(inc, index) {
         <!-- What happened -->
         <div class="incident-section">
           <div class="incident-section-label">What happened</div>
-          <p class="incident-text">${esc(report.what)}</p>
+          <p class="incident-text">${escHtml(report.what)}</p>
         </div>
 
         <!-- Root cause -->
         <div class="incident-section">
           <div class="incident-section-label">Likely root cause</div>
-          <p class="incident-text">${esc(report.rootCause)}</p>
+          <p class="incident-text">${escHtml(report.rootCause)}</p>
         </div>
 
         <!-- Evidence events -->
@@ -339,7 +339,7 @@ function renderIncidentCard(inc, index) {
                 <div class="evidence-item">
                   <span class="ev-sev-dot sev-${event.severity.toLowerCase()}"></span>
                   <span class="ev-id" data-lookup-id="${event.id}" title="Look up Event ${event.id}">${event.id}</span>
-                  <span class="ev-provider">${esc(shortProvider(event.provider))}</span>
+                  <span class="ev-provider">${escHtml(shortProvider(event.provider))}</span>
                   <span class="ev-time">${formatTime(event.timestamp)}</span>
                   <span class="ev-score" title="Relevance score">${score}</span>
                   <span class="ev-expand-chevron">▶</span>
@@ -359,7 +359,7 @@ function renderIncidentCard(inc, index) {
         <div class="incident-section">
           <div class="incident-section-label">Suggested next steps</div>
           <ol class="next-steps-list">
-            ${report.nextSteps.map(s => `<li>${esc(s)}</li>`).join('')}
+            ${report.nextSteps.map(s => `<li>${escHtml(s)}</li>`).join('')}
           </ol>
         </div>
         ` : ''}
@@ -369,14 +369,14 @@ function renderIncidentCard(inc, index) {
         <div class="incident-section">
           <div class="technician-hint">
             <span class="hint-label">Tech Hint</span>
-            <span class="hint-text">${esc(report.technicianHint)}</span>
+            <span class="hint-text">${escHtml(report.technicianHint)}</span>
           </div>
         </div>
         ` : ''}
 
         <!-- Copy for ticket -->
         <div class="incident-footer">
-          <button class="copy-summary-btn" data-summary="${esc(report.psaSummary)}">
+          <button class="copy-summary-btn" data-summary="${escHtml(report.psaSummary)}">
             Copy for ticket
           </button>
           ${report.alternateSignatures?.length ? `
@@ -413,7 +413,7 @@ function renderMiniTimeline(events, anchor) {
                 <div class="tl-content">
                   <span class="tl-time">${formatTime(ev.timestamp)}</span>
                   <span class="tl-id" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">${ev.id}</span>
-                  <span class="tl-provider">${esc(shortProvider(ev.provider))}</span>
+                  <span class="tl-provider">${escHtml(shortProvider(ev.provider))}</span>
                   ${isAnchor ? '<span class="tl-anchor-label">ANCHOR</span>' : ''}
                 </div>
                 <span class="tl-expand-chevron">▶</span>
@@ -511,8 +511,8 @@ function renderEventTable(events) {
           <div class="provider-option-list">
             ${providers.map(p => `
               <label class="provider-option">
-                <input type="checkbox" class="provider-cb" value="${esc(p)}" />
-                <span class="provider-option-name" title="${esc(p)}">${esc(shortProvider(p))}</span>
+                <input type="checkbox" class="provider-cb" value="${escHtml(p)}" />
+                <span class="provider-option-name" title="${escHtml(p)}">${escHtml(shortProvider(p))}</span>
               </label>`).join('')}
           </div>
         </div>
@@ -520,7 +520,7 @@ function renderEventTable(events) {
 
       <select id="tbl-channel" class="filter-control filter-control-select">
         <option value="">All channels</option>
-        ${channels.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}
+        ${channels.map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('')}
       </select>
 
       <div class="filter-date-group">
@@ -799,7 +799,7 @@ function buildTableRow(ev) {
   const sev = ev.severity.toLowerCase();
   const dataKeys = Object.keys(ev.data || {});
   const msgPreview = ev.message
-    ? esc(ev.message.substring(0, 150)) + (ev.message.length > 150 ? '…' : '')
+    ? escHtml(ev.message.substring(0, 150)) + (ev.message.length > 150 ? '…' : '')
     : '<span style="color:var(--text3);font-style:italic">no message</span>';
 
   const mainRow = `
@@ -808,8 +808,8 @@ function buildTableRow(ev) {
       <td class="ev-col-time">${formatDateTime(ev.timestamp)}</td>
       <td><span class="sev-badge sev-badge-${sev}">${ev.severity}</span></td>
       <td><span class="table-event-id" data-lookup-id="${ev.id}" title="Look up Event ${ev.id}">${ev.id}</span></td>
-      <td class="ev-col-provider" title="${esc(ev.provider)}">${esc(shortProvider(ev.provider))}</td>
-      <td class="ev-col-channel">${esc(ev.channel)}</td>
+      <td class="ev-col-provider" title="${escHtml(ev.provider)}">${escHtml(shortProvider(ev.provider))}</td>
+      <td class="ev-col-channel">${escHtml(ev.channel)}</td>
       <td class="ev-col-message">${msgPreview}</td>
     </tr>`;
 
@@ -854,8 +854,8 @@ function buildTableRow(ev) {
   const decodedMsg = decodeWinErrMsg(ev.message);
   const messageHtml = decodedMsg
     ? `<div class="ev-detail-message-wrap">
-        <div class="ev-detail-message">${esc(decodedMsg)}</div>
-        <button class="ev-copy-btn" data-copy="${esc(ev.message)}" title="Copy message">
+        <div class="ev-detail-message">${escHtml(decodedMsg)}</div>
+        <button class="ev-copy-btn" data-copy="${escHtml(ev.message)}" title="Copy message">
           <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
         </button>
        </div>`
@@ -881,7 +881,7 @@ function buildTableRow(ev) {
             ${metaFields.map(([k, v]) => `
               <div class="ev-detail-field">
                 <span class="ev-detail-key">${k}</span>
-                <span class="ev-detail-val">${esc(String(v))}</span>
+                <span class="ev-detail-val">${escHtml(String(v))}</span>
               </div>`).join('')}
           </div>
           ${dataKeys.length || anonKeys.length ? `
@@ -889,13 +889,13 @@ function buildTableRow(ev) {
             <div class="ev-detail-data-title">Event Data</div>
             ${dataKeys.map(k => `
               <div class="ev-detail-data-row">
-                <span class="ev-detail-data-key">${esc(k)}</span>
-                <span class="ev-detail-data-val">${esc(String(ev.data[k]))}</span>
+                <span class="ev-detail-data-key">${escHtml(k)}</span>
+                <span class="ev-detail-data-val">${escHtml(String(ev.data[k]))}</span>
               </div>`).join('')}
             ${anonKeys.map((v, i) => `
               <div class="ev-detail-data-row">
                 <span class="ev-detail-data-key ev-detail-data-key--anon">[${i}]</span>
-                <span class="ev-detail-data-val">${esc(String(v))}</span>
+                <span class="ev-detail-data-val">${escHtml(String(v))}</span>
               </div>`).join('')}
           </div>` : ''}
           <div class="ev-detail-actions">
@@ -910,7 +910,7 @@ function buildTableRow(ev) {
             ${advancedFields.map(([k, v]) => `
               <div class="ev-detail-field">
                 <span class="ev-detail-key">${k}</span>
-                <span class="ev-detail-val">${esc(String(v))}</span>
+                <span class="ev-detail-val">${escHtml(String(v))}</span>
               </div>`).join('')}
           </div>` : ''}
         </div>
@@ -1009,29 +1009,29 @@ function buildPanelContent(id, dbEntry, rawMatches) {
         <div class="lp-doc-header">
           <span class="lp-id-badge">${id}</span>
           <div>
-            <div class="lp-doc-title">${esc(dbEntry.title)}</div>
+            <div class="lp-doc-title">${escHtml(dbEntry.title)}</div>
             <div class="lp-doc-meta">
-              <span class="sev-badge sev-badge-${sev}">${esc(dbEntry.severity)}</span>
-              <span class="lp-channel">${esc(dbEntry.channel || dbEntry.source || '')}</span>
+              <span class="sev-badge sev-badge-${sev}">${escHtml(dbEntry.severity)}</span>
+              <span class="lp-channel">${escHtml(dbEntry.channel || dbEntry.source || '')}</span>
             </div>
           </div>
         </div>
-        <p class="lp-description">${esc(dbEntry.description || dbEntry.short_desc || '')}</p>
+        <p class="lp-description">${escHtml(dbEntry.description || dbEntry.short_desc || '')}</p>
         ${dbEntry.causes?.length ? `
           <div class="lp-subsection-label">Causes</div>
           <ul class="lp-causes">
-            ${dbEntry.causes.map(c => `<li>${esc(c)}</li>`).join('')}
+            ${dbEntry.causes.map(c => `<li>${escHtml(c)}</li>`).join('')}
           </ul>` : ''}
         ${dbEntry.steps?.length ? `
           <div class="lp-subsection-label">Investigation Steps</div>
           <ol class="lp-steps">
-            ${dbEntry.steps.map(s => `<li>${esc(s)}</li>`).join('')}
+            ${dbEntry.steps.map(s => `<li>${escHtml(s)}</li>`).join('')}
           </ol>` : ''}
         ${dbEntry.powershell ? `
           <div class="lp-subsection-label">PowerShell</div>
           <div class="lp-ps-block">
-            <pre>${esc(dbEntry.powershell)}</pre>
-            <button class="lp-copy-ps" data-code="${esc(dbEntry.powershell)}">Copy</button>
+            <pre>${escHtml(dbEntry.powershell)}</pre>
+            <button class="lp-copy-ps" data-code="${escHtml(dbEntry.powershell)}">Copy</button>
           </div>` : ''}
         <div class="lp-doc-footer">
           <a href="event-results.html?q=${id}" target="_blank" rel="noopener" class="lp-full-docs-btn">
@@ -1100,8 +1100,8 @@ function buildEventDetail(ev) {
       </div>` : ''}
       ${decodedMsg
         ? `<div class="ev-detail-message-wrap">
-             <div class="ev-detail-message">${esc(decodedMsg)}</div>
-             <button class="ev-copy-btn" data-copy="${esc(ev.message)}" title="Copy message">
+             <div class="ev-detail-message">${escHtml(decodedMsg)}</div>
+             <button class="ev-copy-btn" data-copy="${escHtml(ev.message)}" title="Copy message">
                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
              </button>
            </div>`
@@ -1111,7 +1111,7 @@ function buildEventDetail(ev) {
           ${metaFields.map(([k, v]) => `
             <div class="ev-detail-field">
               <span class="ev-detail-key">${k}</span>
-              <span class="ev-detail-val">${esc(String(v))}</span>
+              <span class="ev-detail-val">${escHtml(String(v))}</span>
             </div>`).join('')}
         </div>
         ${dataKeys.length || anonData.length ? `
@@ -1119,13 +1119,13 @@ function buildEventDetail(ev) {
           <div class="ev-detail-data-title">Event Data</div>
           ${dataKeys.map(k => `
             <div class="ev-detail-data-row">
-              <span class="ev-detail-data-key">${esc(k)}</span>
-              <span class="ev-detail-data-val">${esc(String(ev.data[k]))}</span>
+              <span class="ev-detail-data-key">${escHtml(k)}</span>
+              <span class="ev-detail-data-val">${escHtml(String(ev.data[k]))}</span>
             </div>`).join('')}
           ${anonData.map((v, i) => `
             <div class="ev-detail-data-row">
               <span class="ev-detail-data-key ev-detail-data-key--anon">[${i}]</span>
-              <span class="ev-detail-data-val">${esc(String(v))}</span>
+              <span class="ev-detail-data-val">${escHtml(String(v))}</span>
             </div>`).join('')}
         </div>` : ''}
       </div>
@@ -1139,17 +1139,9 @@ function buildEventDetail(ev) {
         ${advancedFields.map(([k, v]) => `
           <div class="ev-detail-field">
             <span class="ev-detail-key">${k}</span>
-            <span class="ev-detail-val">${esc(String(v))}</span>
+            <span class="ev-detail-val">${escHtml(String(v))}</span>
           </div>`).join('')}
       </div>` : ''}
-    </div>`;
-}
-
-function lpField(label, value) {
-  return `
-    <div class="lp-raw-field">
-      <span class="lp-raw-key">${label}</span>
-      <span class="lp-raw-val">${value}</span>
     </div>`;
 }
 
@@ -1239,24 +1231,9 @@ function showUploadError(msg) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-function esc(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
 function shortProvider(provider) {
   if (!provider) return '—';
-  // Strip "Microsoft-Windows-" prefix for readability
   return provider.replace(/^Microsoft-Windows-/i, '').replace(/^Microsoft-/i, '');
-}
-
-function formatTime(date) {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function formatDateTime(date) {

@@ -1,4 +1,4 @@
-// Shared theme toggle — imported by both home.js and results.js
+// Shared theme toggle
 
 const STORAGE_KEY = 'ef_theme';
 
@@ -21,4 +21,11 @@ export function applyTheme(theme) {
 export function toggleTheme() {
   const current = document.documentElement.dataset.theme || 'dark';
   applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+export function setupTheme() {
+  initTheme();
+  document.querySelectorAll('.theme-btn').forEach(btn => {
+    btn.addEventListener('click', toggleTheme);
+  });
 }

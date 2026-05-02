@@ -3,6 +3,8 @@
    detects incident signatures, and generates structured reports.
 ──────────────────────────────────────────────────────────────────────────── */
 
+import { formatTime } from './utils.js';
+
 /** Event IDs that represent a system/application failure anchor point */
 const ANCHOR_IDS = new Set([
   41,    // Kernel-Power: system rebooted without cleanly shutting down
@@ -494,6 +496,3 @@ function deduplicateIncidents(incidents) {
   });
 }
 
-function formatTime(date) {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}

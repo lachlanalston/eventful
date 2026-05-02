@@ -3,6 +3,7 @@
  */
 
 import { attachCopyButton, copyShareURL } from './clipboard.js';
+import { escHtml } from './utils.js';
 
 // ─── Severity / channel badge colours ────────────────────────────────────────
 const SEVERITY_CLASS = {
@@ -174,7 +175,7 @@ function buildEventCard(event, onRelatedClick) {
           <span class="ps-filename">Event-${event.id}-Investigation.ps1</span>
           <button class="copy-btn ps-copy-btn">Copy</button>
         </div>
-        <pre class="ps-block"><code class="ps-code">${escapeHtml(event.powershell)}</code></pre>
+        <pre class="ps-block"><code class="ps-code">${escHtml(event.powershell)}</code></pre>
       </div>
     </section>
 
@@ -422,7 +423,7 @@ export function renderBundleCard(container, bundle, allEvents, { onEventClick })
               <span class="ps-filename">${bundle.id}-investigation.ps1</span>
               <button class="copy-btn bundle-ps-copy">Copy</button>
             </div>
-            <pre class="ps-block"><code class="ps-code">${escapeHtml(bundle.composite_powershell)}</code></pre>
+            <pre class="ps-block"><code class="ps-code">${escHtml(bundle.composite_powershell)}</code></pre>
           </div>
         </div>
       </div>
@@ -506,11 +507,3 @@ export function renderSidebarFooter(el, totalEvents) {
   if (el) el.textContent = `${totalEvents} events across 6 sources`;
 }
 
-// ─── Utilities ────────────────────────────────────────────────────────────────
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}

@@ -1,12 +1,9 @@
 import Fuse from 'fuse.js';
 import { allEvents } from '../../data/events/index.js';
-import { initTheme, toggleTheme } from './theme.js';
+import { setupTheme } from './theme.js';
+import { escHtml } from './utils.js';
 
-initTheme();
-
-document.querySelectorAll('.theme-btn').forEach(btn => {
-  btn.addEventListener('click', toggleTheme);
-});
+setupTheme();
 
 // ── Search setup ──────────────────────────────────────────────────────────────
 const fuse = new Fuse(allEvents, {
@@ -51,6 +48,7 @@ function getResults(query) {
 
 // ── Render list ───────────────────────────────────────────────────────────────
 const SEV_ORDER = ['Critical', 'Error', 'Warning', 'Info', 'Verbose'];
+const SEV_RANK  = Object.fromEntries(SEV_ORDER.map((s, i) => [s, i]));
 
 function buildRow(event) {
   const row = document.createElement('div');
@@ -85,10 +83,10 @@ function render(query) {
   $count.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
   $list.innerHTML = '';
 
-  // Group by severity in canonical order
-  const groups = SEV_ORDER
-    .map(sev => ({ sev, items: results.filter(e => e.severity === sev) }))
-    .filter(g => g.items.length > 0);
+  // Group by severity in canonical order — single pass
+  const buckets = {};
+  for (const e of results) (buckets[e.severity] ??= []).push(e);
+  const groups = SEV_ORDER.filter(s => buckets[s]).map(s => ({ sev: s, items: buckets[s] }));
 
   const showHeaders = groups.length > 1;
 
@@ -294,11 +292,3 @@ if (initQ) {
   window.location.href = 'event-lookup.html';
 }
 
-// ── Utility ───────────────────────────────────────────────────────────────────
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
