@@ -48,8 +48,8 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
    APP HEADER — unified, full-width
 ───────────────────────────────────────── */
 .app-header {
-  position: fixed;
-  inset: 0 0 auto 0;
+  position: sticky;
+  top: 0;
   height: var(--header-h);
   background: var(--surface);
   border-bottom: 1px solid var(--border);
