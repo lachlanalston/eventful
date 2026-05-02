@@ -1204,6 +1204,9 @@ ul, ol { list-style: none; }
 }
 .provider-option:hover { background: var(--surface2); }
 .provider-option[hidden] { display: none; }
+.provider-option-unavailable { opacity: 0.38; cursor: not-allowed; }
+.provider-option-unavailable:hover { background: transparent; }
+.provider-option-unavailable input[type="checkbox"] { cursor: not-allowed; }
 
 .provider-option input[type="checkbox"] {
   accent-color: var(--amber);

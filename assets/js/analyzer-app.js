@@ -548,6 +548,7 @@ function renderEventTable(events) {
       else tbl.severities.delete(cb.value);
       cb.closest('.sev-chip').classList.toggle('active', cb.checked);
       tbl.page = 0;
+      updateProviderAvailability();
       redrawTable();
     });
   });
@@ -569,6 +570,32 @@ function renderEventTable(events) {
     const n = tbl.providers.size;
     providerLabel.textContent = n === 0 ? 'All providers' : `${n} provider${n !== 1 ? 's' : ''}`;
     providerBtn?.classList.toggle('filtered', n > 0);
+  }
+
+  function updateProviderAvailability() {
+    const fromMs = tbl.fromTime ? new Date(tbl.fromTime).getTime() : null;
+    const toMs   = tbl.toTime   ? new Date(tbl.toTime).getTime()   : null;
+    const available = new Set(
+      allParsedEvents.filter(e => {
+        if (tbl.severities.size > 0 && !tbl.severities.has(e.severity)) return false;
+        if (tbl.channel && e.channel !== tbl.channel) return false;
+        if (fromMs !== null && e.timestamp < fromMs) return false;
+        if (toMs   !== null && e.timestamp > toMs)   return false;
+        if (tbl.hideNoisy && NOISY_PROVIDERS.has(e.provider)) return false;
+        return true;
+      }).map(e => e.provider).filter(Boolean)
+    );
+    $eventLogFiltersWrap.querySelectorAll('.provider-option').forEach(opt => {
+      const cb = opt.querySelector('.provider-cb');
+      const avail = available.has(cb.value);
+      opt.classList.toggle('provider-option-unavailable', !avail);
+      cb.disabled = !avail;
+      if (!avail && cb.checked) {
+        cb.checked = false;
+        tbl.providers.delete(cb.value);
+      }
+    });
+    updateProviderLabel();
   }
 
   $eventLogFiltersWrap.querySelectorAll('.provider-cb').forEach(cb => {
@@ -607,18 +634,20 @@ function renderEventTable(events) {
       opt.hidden = q ? !opt.querySelector('.provider-option-name').textContent.toLowerCase().includes(q) : false;
     });
   });
-  on('tbl-channel',  'change', e => { tbl.channel  = e.target.value; tbl.page = 0; redrawTable(); });
-  on('tbl-from',     'change', e => { tbl.fromTime = e.target.value; tbl.page = 0; redrawTable(); });
-  on('tbl-to',       'change', e => { tbl.toTime   = e.target.value; tbl.page = 0; redrawTable(); });
+  on('tbl-channel',  'change', e => { tbl.channel  = e.target.value; tbl.page = 0; updateProviderAvailability(); redrawTable(); });
+  on('tbl-from',     'change', e => { tbl.fromTime = e.target.value; tbl.page = 0; updateProviderAvailability(); redrawTable(); });
+  on('tbl-to',       'change', e => { tbl.toTime   = e.target.value; tbl.page = 0; updateProviderAvailability(); redrawTable(); });
   on('tbl-noise', 'click', e => {
     tbl.hideNoisy = !tbl.hideNoisy;
     tbl.page = 0;
     e.target.classList.toggle('active', tbl.hideNoisy);
     e.target.textContent = tbl.hideNoisy ? 'Show noise' : 'Hide noise';
+    updateProviderAvailability();
     redrawTable();
   });
   on('tbl-csv', 'click', () => exportCSV(filteredSortedEvents()));
 
+  updateProviderAvailability();
   redrawTable();
 }
 
