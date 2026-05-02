@@ -281,13 +281,8 @@ function updateUrl(q) {
 const params = new URLSearchParams(location.search);
 const initQ  = params.get('q') || '';
 
-if (initQ) {
-  $search.value = initQ;
-  render(initQ);
-} else {
-  window.location.href = 'index.html';
-}
-
+if (initQ) $search.value = initQ;
+render(initQ);
 $search.focus();
 
 // ── Utility ───────────────────────────────────────────────────────────────────

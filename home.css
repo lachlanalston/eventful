@@ -72,6 +72,31 @@ body {
 }
 .header-logo:hover { opacity: 0.85; }
 
+.header-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.home-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.home-nav-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  padding: 5px 10px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 0.15s, background 0.15s;
+}
+.home-nav-link:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+[data-theme="light"] .home-nav-link:hover { background: rgba(0,0,0,0.05); }
+
 .theme-btn {
   background: none;
   border: 1px solid var(--border);
