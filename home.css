@@ -70,7 +70,7 @@ body {
 .header-divider {
   width: 1px;
   height: 16px;
-  background: var(--border);
+  background: var(--border2);
   flex-shrink: 0;
 }
 
@@ -78,14 +78,14 @@ body {
   display: flex;
   align-items: center;
   gap: 2px;
-  flex-shrink: 0;
+  flex: 1;
 }
 
 .nav-link {
   font-size: 13px;
   font-weight: 500;
   color: var(--text3);
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: 6px;
   text-decoration: none;
   transition: color 0.15s, background 0.15s;
@@ -93,7 +93,12 @@ body {
 }
 .nav-link:hover { color: var(--text2); background: var(--surface2); }
 
-.header-right { margin-left: auto; }
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
 .theme-btn {
   background: none;

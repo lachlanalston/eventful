@@ -9,6 +9,7 @@
   --text2:     #a1a1aa;
   --text3:     #52525b;
   --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.12);
   --mono:      'JetBrains Mono', monospace;
   --sans:      'Inter', sans-serif;
   --header-h:  52px;
@@ -23,7 +24,8 @@
   --text:     #09090b;
   --text2:    #52525b;
   --text3:    #a1a1aa;
-  --border:   rgba(0,0,0,0.08);
+  --border:   rgba(0,0,0,0.07);
+  --border2:  rgba(0,0,0,0.12);
 }
 
 html, body { height: 100%; overflow: hidden; }
@@ -69,7 +71,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .header-divider {
   width: 1px;
   height: 16px;
-  background: var(--border);
+  background: var(--border2);
   flex-shrink: 0;
 }
 
@@ -77,14 +79,14 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   display: flex;
   align-items: center;
   gap: 2px;
-  flex-shrink: 0;
+  flex: 1;
 }
 
 .nav-link {
   font-size: 13px;
   font-weight: 500;
   color: var(--text3);
-  padding: 5px 10px;
+  padding: 5px 12px;
   border-radius: 6px;
   text-decoration: none;
   transition: color 0.15s, background 0.15s;
