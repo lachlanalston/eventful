@@ -4,55 +4,49 @@ import { escHtml } from './utils.js';
 setupTheme();
 
 // ─── DOM refs ────────────────────────────────────────────────────────────────
-const uploadSection     = document.getElementById('upload-section');
-const processingSection = document.getElementById('processing-section');
-const processingText    = document.getElementById('processing-text');
-const resultsSection    = document.getElementById('results-section');
-const dropZone          = document.getElementById('drop-zone');
-const fileInput         = document.getElementById('file-input');
-const newAnalysisBtn    = document.getElementById('new-analysis-btn');
-const resultsSub        = document.getElementById('results-sub');
-const overviewGrid      = document.getElementById('overview-grid');
-const findingsPanel     = document.getElementById('findings-panel');
-const recordsPanel      = document.getElementById('records-panel');
+const uploadSection      = document.getElementById('upload-section');
+const processingSection  = document.getElementById('processing-section');
+const processingText     = document.getElementById('processing-text');
+const resultsSection     = document.getElementById('results-section');
+const dropZone           = document.getElementById('drop-zone');
+const fileInput          = document.getElementById('file-input');
+const newAnalysisBtn     = document.getElementById('new-analysis-btn');
+const resultsSub         = document.getElementById('results-sub');
+const overviewGrid       = document.getElementById('overview-grid');
+const findingsPanel      = document.getElementById('findings-panel');
+const recordsPanel       = document.getElementById('records-panel');
 const recordsFiltersWrap = document.getElementById('records-filters-wrap');
 const recordsTableWrap   = document.getElementById('records-table-wrap');
-const tabFindingsCount  = document.getElementById('tab-findings-count');
-const tabRecordsCount   = document.getElementById('tab-records-count');
+const tabFindingsCount   = document.getElementById('tab-findings-count');
+const tabRecordsCount    = document.getElementById('tab-records-count');
 
-// ─── Category classification ─────────────────────────────────────────────────
-function classify(sourceName) {
-  const s = (sourceName || '').toLowerCase();
-  if (/application error/.test(s))                    return 'crash';
-  if (/application hang/.test(s))                     return 'hang';
-  if (/windows error reporting/.test(s))              return 'wer';
-  if (/msiinstaller|install|setup|uninstall/i.test(s)) return 'software';
-  if (/windows update|windowsupdate|updateclient/i.test(s)) return 'update';
-  if (/windows|microsoft/.test(s))                    return 'windows';
+// ─── Category classification (RelMonReport Problem field) ─────────────────────
+function classifyEvent(problem) {
+  const p = (problem || '').toLowerCase();
+  if (p.includes('stopped working'))                         return 'crash';
+  if (p.includes('stopped responding'))                      return 'hang';
+  if (/windows update|update/.test(p))                      return 'update';
+  if (/install|reconfigur|removal/.test(p))                 return 'software';
   return 'info';
 }
 
 const CAT_LABEL = {
   crash:    'App Crash',
   hang:     'App Hang',
-  wer:      'WER',
-  software: 'Software',
   update:   'Update',
-  windows:  'Windows',
+  software: 'Software',
   info:     'Info',
 };
 
 const CAT_COLOR = {
   crash:    '#f85149',
   hang:     '#d29922',
-  wer:      '#d29922',
-  software: '#58a6ff',
   update:   '#3fb950',
-  windows:  '#bc8cff',
+  software: '#58a6ff',
   info:     '#8b949e',
 };
 
-// Hardware failure keywords in message text
+// Hardware failure keywords
 const HW_PATTERNS = [
   /bad.?block/i, /disk.?error/i, /ntfs.*corrupt/i, /corrupt.*ntfs/i,
   /hardware.?error/i, /memory.*corrupt/i, /corrupt.*memory/i,
@@ -60,23 +54,7 @@ const HW_PATTERNS = [
   /chkdsk/i, /file.?system.*error/i, /bad.?sector/i,
 ];
 
-function isHardwareIndicator(msg) {
-  return HW_PATTERNS.some(p => p.test(msg));
-}
-
-// ─── Datetime normalisation ──────────────────────────────────────────────────
-// Handles: WMI "YYYYMMDDHHMMSS.000000±UUU", ISO "2023-05-15T12:00:00", our "2023-05-15 12:00:00"
-function normaliseTime(t) {
-  if (!t) return '';
-  if (/^\d{14}/.test(t)) {
-    const m = t.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
-    return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : t;
-  }
-  if (t.includes('T')) return t.replace('T', ' ').slice(0, 19);
-  return t;
-}
-
-// ─── XML parser ──────────────────────────────────────────────────────────────
+// ─── XML parser — RelMonReport format (native Windows GUI export) ─────────────
 function parseXml(text) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'application/xml');
@@ -84,80 +62,56 @@ function parseXml(text) {
   const parseErr = doc.querySelector('parsererror');
   if (parseErr) throw new Error('Invalid XML: ' + parseErr.textContent.slice(0, 120));
 
-  const rootTag = doc.documentElement.tagName;
-  let computer = '', generated = '', records = [];
-
-  if (rootTag === 'ReliabilityRecords') {
-    // Format: Get-EventLogExport.ps1
-    computer  = doc.documentElement.getAttribute('computer') || '';
-    generated = doc.documentElement.getAttribute('generated') || '';
-    records = [...doc.querySelectorAll('Record')].map(r => {
-      const get = tag => r.querySelector(tag)?.textContent?.trim() ?? '';
-      const time = normaliseTime(get('TimeGenerated'));
-      return {
-        time, date: time.slice(0, 10),
-        source:  get('SourceName'),
-        product: get('ProductName'),
-        message: get('Message'),
-        eventId: get('EventIdentifier'),
-        user:    get('User'),
-        cat:     classify(get('SourceName')),
-      };
-    });
-
-  } else if (rootTag === 'Objects') {
-    // Format: Get-WmiObject Win32_ReliabilityRecords | ConvertTo-Xml
-    const objs = [...doc.querySelectorAll('Object')].filter(o =>
-      (o.getAttribute('Type') || '').includes('Win32_ReliabilityRecords')
+  const root = doc.documentElement;
+  if (root.tagName !== 'RelMonReport') {
+    throw new Error(
+      `Unrecognised format — root element is <${root.tagName}>. ` +
+      `Expected <RelMonReport> from the Windows Reliability Monitor GUI export. ` +
+      `Open Reliability Monitor → Action → Save Reliability History.`
     );
-    if (!objs.length) throw new Error('No Win32_ReliabilityRecords objects found in this ConvertTo-Xml file.');
-    records = objs.map(obj => {
-      const getProp = name => {
-        const el = [...obj.querySelectorAll('Property')].find(p => p.getAttribute('Name') === name);
-        return el?.textContent?.trim() ?? '';
-      };
-      const time = normaliseTime(getProp('TimeGenerated'));
-      return {
-        time, date: time.slice(0, 10),
-        source:  getProp('SourceName'),
-        product: getProp('ProductName'),
-        message: getProp('Message'),
-        eventId: String(getProp('EventIdentifier')),
-        user:    getProp('User'),
-        cat:     classify(getProp('SourceName')),
-      };
-    });
-
-  } else {
-    throw new Error(`Unrecognised format — root element is <${rootTag}>. Expected <ReliabilityRecords> (Get-EventLogExport.ps1) or <Objects> (ConvertTo-Xml).`);
   }
 
-  if (!records.length) throw new Error('No reliability records found in this file.');
-  records.sort((a, b) => b.time.localeCompare(a.time));
-  return { computer, generated, records };
+  const generated = root.getAttribute('TimeGenerated') || '';
+
+  const records = [...doc.querySelectorAll('RacEvents > Event')].map(ev => {
+    const get = tag => ev.querySelector(tag)?.textContent?.trim() ?? '';
+    const impact  = get('Impact');
+    const source  = get('Source');
+    const problem = get('Problem');
+    return {
+      source,
+      product: source,
+      message: problem,
+      impact,
+      cat: classifyEvent(problem),
+    };
+  });
+
+  if (!records.length) throw new Error('No events found in this Reliability Monitor export.');
+  return { generated, records };
 }
 
 // ─── Findings engine ─────────────────────────────────────────────────────────
 function analyse(records) {
   const findings = [];
-
-  // Helper: add finding
   const add = (sev, title, detail, extra = '') =>
     findings.push({ sev, title, detail, extra });
 
   const crashes  = records.filter(r => r.cat === 'crash');
   const hangs    = records.filter(r => r.cat === 'hang');
-  const software = records.filter(r => r.cat === 'software');
+  const warnings = records.filter(r => r.impact === 'Warning');
 
   // 1. Hardware failure indicators
-  const hwHits = records.filter(r => isHardwareIndicator(r.message));
+  const hwHits = records.filter(r =>
+    HW_PATTERNS.some(p => p.test(r.source) || p.test(r.message))
+  );
   if (hwHits.length) {
     add('crit',
       `Hardware failure indicator${hwHits.length > 1 ? 's' : ''} detected (${hwHits.length})`,
       'One or more records contain keywords associated with disk I/O errors, NTFS corruption, bad sectors, or memory faults. ' +
       'Run <code>chkdsk C: /f /r</code> and check SMART data before any other investigation.',
       hwHits.slice(0, 3).map(r =>
-        `<div class="finding-event"><span class="fe-time">${escHtml(r.time)}</span> <span class="fe-src">${escHtml(r.source)}</span> — ${escHtml(r.message.slice(0, 120))}</div>`
+        `<div class="finding-event"><span class="fe-src">${escHtml(r.source)}</span> — ${escHtml(r.message)}</div>`
       ).join('')
     );
   }
@@ -165,21 +119,16 @@ function analyse(records) {
   // 2. Recurring app crashes
   const crashByApp = {};
   for (const r of crashes) {
-    const key = (r.product || r.source).toLowerCase();
-    if (!crashByApp[key]) crashByApp[key] = { label: r.product || r.source, events: [] };
-    crashByApp[key].events.push(r);
+    const key = r.source.toLowerCase();
+    if (!crashByApp[key]) crashByApp[key] = { label: r.source, count: 0 };
+    crashByApp[key].count++;
   }
-  for (const [, v] of Object.entries(crashByApp).sort((a, b) => b[1].events.length - a[1].events.length)) {
-    if (v.events.length >= 3) {
-      const first = v.events[v.events.length - 1].time.slice(0, 10);
-      const last  = v.events[0].time.slice(0, 10);
+  for (const v of Object.values(crashByApp).sort((a, b) => b.count - a.count)) {
+    if (v.count >= 2) {
       add('warn',
-        `${escHtml(v.label)} crashed ${v.events.length} times`,
-        `Repeated crash pattern from ${first} to ${last}. Check for a pending application update, ` +
-        `conflicting DLL, or corrupt installation. Look for Event 1000 in the Application log for faulting module details.`,
-        v.events.slice(0, 3).map(r =>
-          `<div class="finding-event"><span class="fe-time">${escHtml(r.time)}</span> ${escHtml(r.message.slice(0, 100))}</div>`
-        ).join('')
+        `${escHtml(v.label)} crashed ${v.count} time${v.count > 1 ? 's' : ''}`,
+        `Repeated crash pattern. Check for a pending application update, conflicting DLL, or corrupt installation. ` +
+        `Look for Event 1000 in the Application log for faulting module details.`
       );
     }
   }
@@ -187,75 +136,44 @@ function analyse(records) {
   // 3. Recurring app hangs
   const hangByApp = {};
   for (const r of hangs) {
-    const key = (r.product || r.source).toLowerCase();
-    if (!hangByApp[key]) hangByApp[key] = { label: r.product || r.source, events: [] };
-    hangByApp[key].events.push(r);
+    const key = r.source.toLowerCase();
+    if (!hangByApp[key]) hangByApp[key] = { label: r.source, count: 0 };
+    hangByApp[key].count++;
   }
-  for (const [, v] of Object.entries(hangByApp).sort((a, b) => b[1].events.length - a[1].events.length)) {
-    if (v.events.length >= 2) {
+  for (const v of Object.values(hangByApp).sort((a, b) => b.count - a.count)) {
+    if (v.count >= 2) {
       add('warn',
-        `${escHtml(v.label)} stopped responding ${v.events.length} times`,
-        `Repeated hang pattern. Common causes: main thread blocked on slow disk/network, deadlock, or antivirus scanning ' +
-        'files the app is trying to access. Try disabling AV exclusions for the app directory as a test.`,
-        v.events.slice(0, 3).map(r =>
-          `<div class="finding-event"><span class="fe-time">${escHtml(r.time)}</span> ${escHtml(r.message.slice(0, 100))}</div>`
-        ).join('')
+        `${escHtml(v.label)} stopped responding ${v.count} time${v.count > 1 ? 's' : ''}`,
+        `Repeated hang pattern. Common causes: main thread blocked on slow disk/network, deadlock, or antivirus scanning ` +
+        `files the app is trying to access. Try adding the app directory to AV exclusions as a test.`
       );
     }
   }
 
-  // 4. Post-install regressions — crash cluster appearing within 48h of a software change
-  for (const sw of software) {
-    const swTime = new Date(sw.time);
-    const window48h = new Date(swTime.getTime() + 48 * 60 * 60 * 1000);
-    const postCrashes = crashes.filter(r => {
-      const t = new Date(r.time);
-      return t >= swTime && t <= window48h;
-    });
-    if (postCrashes.length >= 2) {
-      const apps = [...new Set(postCrashes.map(r => r.product || r.source))].join(', ');
-      add('warn',
-        `${postCrashes.length} crash${postCrashes.length > 1 ? 'es' : ''} within 48h of software change`,
-        `<strong>${escHtml(sw.product || sw.source)}</strong> was installed/changed on ${escHtml(sw.time.slice(0, 10))}. ` +
-        `${postCrashes.length} crashes followed involving: ${escHtml(apps)}. ` +
-        `Consider rolling back or checking for compatibility issues introduced by the change.`,
-        postCrashes.slice(0, 3).map(r =>
-          `<div class="finding-event"><span class="fe-time">${escHtml(r.time)}</span> ${escHtml(r.product || r.source)} — ${escHtml(r.message.slice(0, 80))}</div>`
-        ).join('')
-      );
-    }
-  }
-
-  // 5. Recent critical events (last 24h)
-  const now = new Date();
-  const recent = records.filter(r => {
-    const t = new Date(r.time);
-    return (now - t) <= 24 * 60 * 60 * 1000 && (r.cat === 'crash' || r.cat === 'hang');
-  });
-  if (recent.length) {
+  // 4. Failed updates / installs
+  if (warnings.length >= 3) {
+    const labels = [...new Set(warnings.slice(0, 5).map(r => r.source))].join(', ');
     add('warn',
-      `${recent.length} crash/hang event${recent.length > 1 ? 's' : ''} in the last 24 hours`,
-      `Active instability — these issues are recent and likely still occurring. Prioritise investigation.`,
-      recent.map(r =>
-        `<div class="finding-event"><span class="fe-time">${escHtml(r.time)}</span> <span class="fe-src">${escHtml(CAT_LABEL[r.cat])}</span> ${escHtml(r.product || r.source)}</div>`
-      ).join('')
+      `${warnings.length} failed update${warnings.length > 1 ? 's' : ''} or installation${warnings.length > 1 ? 's' : ''}`,
+      `Multiple Warning-impact events detected. Check Windows Update history and application installer logs. ` +
+      `Affected: ${escHtml(labels)}${warnings.length > 5 ? ` + ${warnings.length - 5} more` : ''}.`
     );
   }
 
-  // 6. High overall crash volume
-  if (crashes.length >= 10 && !findings.some(f => f.sev === 'crit')) {
+  // 5. High crash volume
+  if (crashes.length >= 8 && !findings.some(f => f.sev === 'crit')) {
     add('warn',
       `High crash volume — ${crashes.length} application crashes recorded`,
-      `This machine has an unusually high number of application crash events. Consider running ` +
-      `SFC /scannow and DISM /Online /Cleanup-Image /RestoreHealth to check for system file corruption.`
+      `Unusually high number of application crash events. Consider running ` +
+      `<code>sfc /scannow</code> and <code>DISM /Online /Cleanup-Image /RestoreHealth</code> to check for system file corruption.`
     );
   }
 
-  // 7. All quiet
+  // 6. All quiet
   if (findings.length === 0) {
     add('ok',
       'No significant issues detected',
-      'No recurring crashes, hangs, hardware indicators, or post-install regressions found in the reliability history.'
+      'No recurring crashes, hangs, hardware indicators, or failed updates found in the reliability history.'
     );
   }
 
@@ -266,24 +184,25 @@ function analyse(records) {
 }
 
 // ─── Render helpers ──────────────────────────────────────────────────────────
-function renderOverview(records, computer) {
+function renderOverview(records, generated) {
   const crashes  = records.filter(r => r.cat === 'crash').length;
   const hangs    = records.filter(r => r.cat === 'hang').length;
   const software = records.filter(r => r.cat === 'software').length;
-  const dates    = records.map(r => r.date).filter(Boolean);
-  const earliest = dates.length ? dates[dates.length - 1] : '—';
-  const latest   = dates.length ? dates[0] : '—';
+  const warnings = records.filter(r => r.impact === 'Warning').length;
+
+  const reportDate = generated ? generated.slice(0, 10) : '—';
 
   const stat = (label, value, color = '') =>
     `<div class="overview-stat">${color ? `<span class="overview-value" style="color:${color}">${value}</span>` : `<span class="overview-value">${value}</span>`}<span class="overview-label">${label}</span></div>`;
 
   overviewGrid.className = 'overview-grid';
   overviewGrid.innerHTML =
-    stat('Total Records', records.length) +
+    stat('Total Events', records.length) +
     stat('Crashes', crashes, crashes > 0 ? '#f85149' : '') +
     stat('Hangs', hangs, hangs > 0 ? '#d29922' : '') +
     stat('Software Changes', software, '#58a6ff') +
-    stat('Date Range', earliest === latest ? earliest : `${earliest} → ${latest}`);
+    stat('Warnings', warnings, warnings > 0 ? '#d29922' : '') +
+    stat('Report Date', reportDate);
 }
 
 function renderFindings(findings) {
@@ -311,7 +230,6 @@ function renderFindings(findings) {
 }
 
 function renderRecordsTable(records, activeFilter) {
-  // Filter bar
   const cats = ['all', ...new Set(records.map(r => r.cat))];
   recordsFiltersWrap.innerHTML = `
     <div class="filter-bar">
@@ -336,21 +254,19 @@ function renderRecordsTable(records, activeFilter) {
       <table class="event-table">
         <thead>
           <tr>
-            <th>Time</th>
+            <th>Impact</th>
             <th>Category</th>
-            <th>Product / Application</th>
-            <th>Source</th>
-            <th>Description</th>
+            <th>Source / Application</th>
+            <th>Problem</th>
           </tr>
         </thead>
         <tbody>
           ${filtered.map(r => `
             <tr>
-              <td class="et-time">${escHtml(r.time)}</td>
+              <td><span class="cat-badge" style="color:${r.impact === 'Critical' ? '#f85149' : r.impact === 'Warning' ? '#d29922' : '#8b949e'}">${escHtml(r.impact)}</span></td>
               <td><span class="cat-badge" style="color:${CAT_COLOR[r.cat] ?? '#8b949e'}">${CAT_LABEL[r.cat] ?? r.cat}</span></td>
-              <td class="et-source">${escHtml(r.product || '—')}</td>
               <td class="et-source">${escHtml(r.source)}</td>
-              <td class="et-msg">${escHtml(r.message.slice(0, 200))}${r.message.length > 200 ? '…' : ''}</td>
+              <td class="et-msg">${escHtml(r.message)}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -358,7 +274,6 @@ function renderRecordsTable(records, activeFilter) {
     </div>
   `;
 
-  // Filter chip click handlers
   recordsFiltersWrap.querySelectorAll('.filter-chip').forEach(btn => {
     btn.addEventListener('click', () => renderRecordsTable(records, btn.dataset.cat));
   });
@@ -370,8 +285,8 @@ document.querySelectorAll('.analyzer-tab').forEach(tab => {
     document.querySelectorAll('.analyzer-tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     const target = tab.dataset.tab;
-    findingsPanel.hidden  = target !== 'findings';
-    recordsPanel.hidden   = target !== 'records';
+    findingsPanel.hidden = target !== 'findings';
+    recordsPanel.hidden  = target !== 'records';
   });
 });
 
@@ -388,19 +303,27 @@ function processFile(file) {
   reader.onload = e => {
     try {
       processingText.textContent = 'Analysing…';
-      const { computer, generated, records } = parseXml(e.target.result);
+
+      // Detect UTF-16 BOM and decode — native Windows GUI export is UTF-16 LE
+      const buf   = e.target.result;
+      const bytes = new Uint8Array(buf);
+      let text;
+      if (bytes[0] === 0xFF && bytes[1] === 0xFE) {
+        text = new TextDecoder('utf-16le').decode(buf);
+      } else if (bytes[0] === 0xFE && bytes[1] === 0xFF) {
+        text = new TextDecoder('utf-16be').decode(buf);
+      } else {
+        text = new TextDecoder('utf-8').decode(buf);
+      }
+
+      const { generated, records } = parseXml(text);
 
       processingSection.hidden = true;
       resultsSection.hidden    = false;
 
-      const subtitle = [
-        computer ? `Host: ${computer}` : '',
-        `${records.length} records`,
-        generated ? `Generated ${generated}` : '',
-      ].filter(Boolean).join('  ·  ');
-      resultsSub.textContent = subtitle;
+      resultsSub.textContent = `${records.length} events · Report generated ${generated || 'unknown'}`;
 
-      renderOverview(records, computer);
+      renderOverview(records, generated);
 
       const findings = analyse(records);
       renderFindings(findings);
@@ -414,14 +337,14 @@ function processFile(file) {
         <p class="processing-error">
           <strong>Could not parse file</strong><br>
           ${escHtml(err.message)}<br>
-          <span style="font-size:0.82rem;color:var(--text-muted)">Expected a ReliabilityHistory.xml from Get-EventLogExport.ps1, or the output of: (Get-WmiObject Win32_ReliabilityRecords | ConvertTo-Xml).Save("C:\ReliabilityHistory.xml")</span>
+          <span style="font-size:0.82rem;color:var(--text-muted)">Open Reliability Monitor → Action → Save Reliability History to export the correct file.</span>
         </p>
         <button class="btn-secondary" style="margin-top:1rem" id="retry-btn">← Try another file</button>
       `;
       document.getElementById('retry-btn')?.addEventListener('click', resetToUpload);
     }
   };
-  reader.readAsText(file);
+  reader.readAsArrayBuffer(file);
 }
 
 function resetToUpload() {
