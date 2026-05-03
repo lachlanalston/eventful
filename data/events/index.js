@@ -11,6 +11,12 @@ export { hypervEvents } from './hyperv.js';
 export { certsEvents } from './certs.js';
 export { iisEvents } from './iis.js';
 export { dhcpServerEvents } from './dhcpserver.js';
+export { defenderEvents } from './defender.js';
+export { accountMgmtEvents } from './accountmgmt.js';
+export { adReplicationEvents } from './adreplication.js';
+export { tasksEvents } from './tasks.js';
+export { bitlockerEvents } from './bitlocker.js';
+export { backupEvents } from './backup.js';
 
 import { securityEvents } from './security.js';
 import { systemEvents } from './system.js';
@@ -25,6 +31,12 @@ import { hypervEvents } from './hyperv.js';
 import { certsEvents } from './certs.js';
 import { iisEvents } from './iis.js';
 import { dhcpServerEvents } from './dhcpserver.js';
+import { defenderEvents } from './defender.js';
+import { accountMgmtEvents } from './accountmgmt.js';
+import { adReplicationEvents } from './adreplication.js';
+import { tasksEvents } from './tasks.js';
+import { bitlockerEvents } from './bitlocker.js';
+import { backupEvents } from './backup.js';
 
 export const allEvents = [
   ...securityEvents,
@@ -39,5 +51,11 @@ export const allEvents = [
   ...hypervEvents,
   ...certsEvents,
   ...iisEvents,
-  ...dhcpServerEvents
+  ...dhcpServerEvents,
+  ...defenderEvents,
+  ...accountMgmtEvents,
+  ...adReplicationEvents,
+  ...tasksEvents,
+  ...bitlockerEvents,
+  ...backupEvents
 ];
