@@ -392,7 +392,7 @@ function buildTicketNote(logData, findings) {
   const relCrashes = (reliability?.records ?? []).filter(r => r.cat === 'crash').length;
 
   const lines = [
-    'INCIDENT ANALYSIS',
+    'WINDOWS INCIDENT ANALYSIS',
     `Computer:   ${computer || 'unknown'}`,
     `Analysed via Eventful — eventful.lrfa.dev/incident-analyzer.html`,
     '',

@@ -18,10 +18,10 @@
     <div class="header-divider"></div>
     <nav class="app-nav">
       <a href="event-lookup.html" class="nav-link">Event Lookup</a>
-      <a href="windows-log-analyzer.html" class="nav-link">Windows Log Analyzer</a>
-      <a href="reliability-analyzer.html" class="nav-link">Reliability Analyzer</a>
-      <a href="incident-analyzer.html" class="nav-link">Incident Analyzer</a>
-      <a href="macos-log-analyzer.html" class="nav-link">macOS Log Analyzer</a>
+      <a href="windows-log-analyzer.html" class="nav-link">Windows Log Analyser</a>
+      <a href="reliability-analyzer.html" class="nav-link">Reliability Analyser</a>
+      <a href="incident-analyzer.html" class="nav-link">Windows Incident Analyser</a>
+      <a href="macos-log-analyzer.html" class="nav-link">macOS Log Analyser</a>
     </nav>
     <div class="header-right">
       <button class="theme-btn" title="Toggle theme"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
@@ -58,42 +58,56 @@
         </div>
       </div>
 
-      <!-- Windows Log Analyzer -->
+      <!-- Windows Log Analyser -->
       <div class="tool-card">
         <div class="tool-card-body">
           <div class="tool-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
           </div>
-          <h2 class="tool-name">Windows Log Analyzer</h2>
+          <h2 class="tool-name">Windows Log Analyser</h2>
           <p class="tool-desc">Upload a Windows event log export. Eventful correlates the events, surfaces what matters, and tells you where to start.</p>
         </div>
         <div class="tool-card-footer">
-          <a href="windows-log-analyzer.html" class="tool-btn">Open Windows Log Analyzer →</a>
+          <a href="windows-log-analyzer.html" class="tool-btn">Open Windows Log Analyser →</a>
         </div>
       </div>
 
-      <!-- Reliability Analyzer -->
+      <!-- Reliability Analyser -->
       <div class="tool-card">
         <div class="tool-card-body">
           <div class="tool-icon">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
           </div>
-          <h2 class="tool-name">Reliability Analyzer</h2>
+          <h2 class="tool-name">Reliability Analyser</h2>
           <p class="tool-desc">Upload a ReliabilityHistory.xml export. Eventful surfaces recurring crashes, post-install regressions, and hardware failure indicators — without opening Reliability Monitor manually.</p>
         </div>
         <div class="tool-card-footer">
-          <a href="reliability-analyzer.html" class="tool-btn">Open Reliability Analyzer →</a>
+          <a href="reliability-analyzer.html" class="tool-btn">Open Reliability Analyser →</a>
         </div>
       </div>
 
-      <!-- macOS Log Analyzer -->
+      <!-- Windows Incident Analyser -->
+      <div class="tool-card">
+        <div class="tool-card-body">
+          <div class="tool-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+          </div>
+          <h2 class="tool-name">Windows Incident Analyser</h2>
+          <p class="tool-desc">Upload the ZIP from Get-EventLogExport.ps1. Eventful cross-correlates System, Application, Security, Setup, and Reliability logs together — BSODs, hardware failures, security events, and post-install regressions in one view.</p>
+        </div>
+        <div class="tool-card-footer">
+          <a href="incident-analyzer.html" class="tool-btn">Open Windows Incident Analyser →</a>
+        </div>
+      </div>
+
+      <!-- macOS Log Analyser -->
       <div class="tool-card tool-card-soon">
         <div class="tool-card-body">
           <div class="tool-icon tool-icon-muted">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><path d="M16 13H8M16 17H8M10 9H8"/></svg>
           </div>
           <div class="tool-name-row">
-            <h2 class="tool-name">macOS Log Analyzer</h2>
+            <h2 class="tool-name">macOS Log Analyser</h2>
             <span class="coming-soon-badge">Coming soon</span>
           </div>
           <p class="tool-desc">macOS unified log analysis coming soon — the same fast workflow for Console logs.</p>
