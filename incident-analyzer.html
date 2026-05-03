@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Reliability Analyzer — Eventful</title>
-  <meta name="description" content="Upload a ReliabilityHistory.xml export and surface recurring crashes, post-install regressions, and hardware failure indicators." />
+  <title>Incident Analyzer — Eventful</title>
+  <meta name="description" content="Upload the ZIP from Get-EventLogExport.ps1. Eventful cross-correlates System, Application, Security, Setup, and Reliability logs to surface root causes." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="analyzer.css" />
@@ -17,8 +17,8 @@
     <nav class="app-nav">
       <a href="event-lookup.html" class="nav-link">Event Lookup</a>
       <a href="windows-log-analyzer.html" class="nav-link">Windows Log Analyzer</a>
-      <a href="reliability-analyzer.html" class="nav-link active">Reliability Analyzer</a>
-      <a href="incident-analyzer.html" class="nav-link">Incident Analyzer</a>
+      <a href="reliability-analyzer.html" class="nav-link">Reliability Analyzer</a>
+      <a href="incident-analyzer.html" class="nav-link active">Incident Analyzer</a>
       <a href="macos-log-analyzer.html" class="nav-link">macOS Log Analyzer</a>
     </nav>
     <div class="header-right">
@@ -30,35 +30,35 @@
   <div id="upload-section" class="upload-section">
     <div class="upload-hero">
       <span class="upload-hero-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
       </span>
-      <h1>Reliability Analyzer</h1>
+      <h1>Incident Analyzer</h1>
       <p class="upload-hero-sub">
-        Export from Windows Reliability Monitor and drop the file here. Eventful surfaces recurring crashes, hangs, failed updates, and hardware failure indicators in seconds.
+        Export all Windows event logs and Reliability Monitor history, drop the ZIP here. Eventful cross-correlates every source to surface the root cause — BSODs, hardware failures, security events, app crashes, and post-install regressions in one view.
       </p>
 
       <div class="drop-zone" id="drop-zone">
-        <input type="file" id="file-input" accept=".xml,text/xml,application/xml" hidden />
+        <input type="file" id="file-input" accept=".zip,application/zip,application/x-zip-compressed" hidden />
         <span class="drop-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
         </span>
-        <p class="drop-title">Drop Reliability Monitor export here</p>
+        <p class="drop-title">Drop event log ZIP here</p>
         <p class="drop-sub">
           or <button class="drop-browse">browse files</button>
         </p>
-        <span class="drop-hint">XML exported from Windows Reliability Monitor GUI</span>
+        <span class="drop-hint">ZIP from Get-EventLogExport.ps1 — contains System, Application, Security, Setup, and ReliabilityHistory XML files</span>
       </div>
 
       <details class="how-to">
-        <summary>How to export from Reliability Monitor</summary>
+        <summary>How to export event logs</summary>
         <ol>
-          <li>Press <strong>Win + R</strong>, type <code>perfmon /rel</code>, press Enter</li>
-          <li>In the Action menu, click <strong>Save Reliability History…</strong></li>
-          <li>Save the <code>.xml</code> file anywhere</li>
-          <li>Upload that file here</li>
+          <li>Download <strong>Get-EventLogExport.ps1</strong> from <a href="https://tools.lrfa.dev/#scripts/get-eventlogexport" target="_blank" rel="noopener">tools.lrfa.dev</a></li>
+          <li>Run it on the target machine: <code>.\Get-EventLogExport.ps1</code></li>
+          <li>It exports System, Application, Security, Setup logs + Reliability Monitor history to a ZIP</li>
+          <li>Upload that ZIP here</li>
         </ol>
         <p style="margin-top:0.75rem;font-size:0.82rem;color:var(--text-muted)">
-          Alternatively: search <strong>Reliability History</strong> in the Start menu and use the Action menu from there.
+          Individual files also work — drop a single XML if you only have one log.
         </p>
       </details>
     </div>
@@ -67,7 +67,7 @@
   <!-- ── Processing state ─────────────────────────────────────────────────── -->
   <div id="processing-section" class="processing-section" hidden>
     <div class="processing-spinner"></div>
-    <p id="processing-text" class="processing-text">Parsing reliability records…</p>
+    <p id="processing-text" class="processing-text">Reading ZIP archive…</p>
   </div>
 
   <!-- ── Results state ────────────────────────────────────────────────────── -->
@@ -75,7 +75,7 @@
 
     <div class="results-header">
       <div class="results-header-left">
-        <h2 class="results-title">Reliability Analysis</h2>
+        <h2 class="results-title">Incident Analysis</h2>
         <p id="results-sub" class="results-sub-text"></p>
       </div>
       <div class="results-header-right">
@@ -90,20 +90,28 @@
       <button class="analyzer-tab active" data-tab="findings">
         Findings <span id="tab-findings-count" class="tab-count"></span>
       </button>
-      <button class="analyzer-tab" data-tab="records">
-        All Records <span id="tab-records-count" class="tab-count"></span>
+      <button class="analyzer-tab" data-tab="events">
+        All Events <span id="tab-events-count" class="tab-count"></span>
+      </button>
+      <button class="analyzer-tab" data-tab="reliability">
+        Reliability <span id="tab-rel-count" class="tab-count"></span>
       </button>
     </div>
 
     <div id="findings-panel" class="tab-panel"></div>
 
-    <div id="records-panel" class="tab-panel" hidden>
-      <div id="records-filters-wrap"></div>
-      <div id="records-table-wrap"></div>
+    <div id="events-panel" class="tab-panel" hidden>
+      <div id="events-filters-wrap"></div>
+      <div id="events-table-wrap"></div>
+    </div>
+
+    <div id="reliability-panel" class="tab-panel" hidden>
+      <div id="rel-filters-wrap"></div>
+      <div id="rel-table-wrap"></div>
     </div>
 
   </div>
 
-  <script type="module" src="assets/js/reliability-analyzer.js"></script>
+  <script type="module" src="assets/js/incident-analyzer.js"></script>
 </body>
 </html>
