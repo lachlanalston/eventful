@@ -1290,6 +1290,58 @@ ul, ol { list-style: none; }
 .sev-chip.active[data-severity="Info"]     { color: #7dd3fc; border-color: rgba(56,189,248,0.4); background: rgba(56,189,248,0.08); }
 .sev-chip.active[data-severity="Verbose"]  { color: #94a3b8; border-color: rgba(100,116,139,0.4); background: rgba(100,116,139,0.08); }
 
+/* ── Category filter chips (Reliability Analyzer) ──────────────────────────── */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  padding: 12px 0 16px;
+}
+
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text3);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.filter-chip:hover { border-color: rgba(255,255,255,0.15); color: var(--text2); }
+
+.filter-chip.active {
+  color: var(--amber);
+  border-color: rgba(245,158,11,0.4);
+  background: rgba(245,158,11,0.08);
+}
+
+.chip-count {
+  font-size: 9px;
+  opacity: 0.65;
+}
+
+.cat-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.event-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+}
+
 .filter-csv-btn {
   height: 32px;
   padding: 0 12px;
