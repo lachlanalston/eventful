@@ -1342,6 +1342,46 @@ ul, ol { list-style: none; }
   border-radius: var(--r);
 }
 
+/* ── Findings notices (info severity — compact strip) ───────────────────────── */
+.findings-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.findings-notice {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  flex-wrap: wrap;
+}
+
+.findings-notice-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+
+.findings-notice-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  flex-shrink: 0;
+}
+
+.findings-notice-detail {
+  font-size: 12px;
+  color: var(--text3);
+}
+
 .finding-events { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
 
 .finding-event {

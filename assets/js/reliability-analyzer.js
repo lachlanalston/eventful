@@ -157,28 +157,30 @@ function analyse(records) {
     }
   }
 
-  // 4. Post-install regressions — crash cluster within 48h of a software change
+  // 4. Post-install regressions — aggregate all clusters into ONE finding
   const software = records.filter(r => r.cat === 'software');
+  const regressions = [];
   for (const sw of software) {
-    const swTime = new Date(sw.time);
+    const swTime    = new Date(sw.time);
     const window48h = new Date(swTime.getTime() + 48 * 60 * 60 * 1000);
-    const postCrashes = crashes.filter(r => {
-      const t = new Date(r.time);
-      return t >= swTime && t <= window48h;
-    });
-    if (postCrashes.length >= 2) {
-      const apps = [...new Set(postCrashes.map(r => r.source))].join(', ');
-      add('warn',
-        `${postCrashes.length} crash${postCrashes.length > 1 ? 'es' : ''} within 48h of software change on ${escHtml(fmtTime(sw.time).slice(0, 10))}`,
-        `<strong>${escHtml(sw.source)}</strong> was installed/changed at ${escHtml(fmtTime(sw.time))}. ` +
-        `${postCrashes.length} crash${postCrashes.length > 1 ? 'es' : ''} followed involving: ${escHtml(apps)}. ` +
-        `Consider rolling back or checking for compatibility issues.`,
-        postCrashes.slice(0, 5).map(eventRow).join('')
-      );
-    }
+    const postCrashes = crashes.filter(r => { const t = new Date(r.time); return t >= swTime && t <= window48h; });
+    if (postCrashes.length >= 2) regressions.push({ sw, postCrashes });
+  }
+  if (regressions.length) {
+    regressions.sort((a, b) => b.postCrashes.length - a.postCrashes.length);
+    const totalCrashes = regressions.reduce((s, r) => s + r.postCrashes.length, 0);
+    const top = regressions.slice(0, 3);
+    add('warn',
+      `${regressions.length} post-install regression${regressions.length > 1 ? 's' : ''} detected — ${totalCrashes} crash${totalCrashes > 1 ? 'es' : ''} after software changes`,
+      `Crash clusters found within 48h of software installs/changes. ` +
+      `Check top offenders below — consider rolling back the relevant application.`,
+      top.map(({ sw: s, postCrashes: pc }) =>
+        `<div class="finding-event"><span class="fe-time">${escHtml(fmtTime(s.time))}</span><span class="fe-src">${escHtml(s.source)}</span><span class="fe-msg">→ ${pc.length} crash${pc.length > 1 ? 'es' : ''} in 48h</span></div>`
+      ).join('') + (regressions.length > 3 ? `<div class="finding-event" style="color:var(--text3);font-size:11px">+ ${regressions.length - 3} more</div>` : '')
+    );
   }
 
-  // 5. Recent critical events (last 24h relative to report generation time)
+  // 5. Recent critical events (last 24h relative to newest event in data)
   const reportTime = new Date(records[0]?.time || Date.now());
   const recent = records.filter(r => {
     const t = new Date(r.time);
@@ -187,23 +189,12 @@ function analyse(records) {
   if (recent.length) {
     add('warn',
       `${recent.length} crash/hang event${recent.length > 1 ? 's' : ''} in the 24h before this report`,
-      `Active instability — these events are recent and likely still occurring. Prioritise investigation.`,
+      `Active instability — these events are recent. Prioritise investigation.`,
       recent.map(eventRow).join('')
     );
   }
 
-  // 6. Failed updates / installs
-  if (warnings.length >= 3) {
-    const labels = [...new Set(warnings.slice(0, 5).map(r => r.source))].join(', ');
-    add('warn',
-      `${warnings.length} failed update${warnings.length > 1 ? 's' : ''} or installation${warnings.length > 1 ? 's' : ''}`,
-      `Multiple Warning-impact events detected. Check Windows Update history and application installer logs. ` +
-      `Affected: ${escHtml(labels)}${warnings.length > 5 ? ` + ${warnings.length - 5} more` : ''}.`,
-      warnings.slice(0, 5).map(eventRow).join('')
-    );
-  }
-
-  // 7. High crash volume
+  // 6. High crash volume
   if (crashes.length >= 8 && !findings.some(f => f.sev === 'crit')) {
     add('warn',
       `High crash volume — ${crashes.length} application crashes recorded`,
@@ -212,11 +203,21 @@ function analyse(records) {
     );
   }
 
+  // 7. Failed updates / installs — info severity (shown compact, excluded from ticket notes)
+  if (warnings.length > 0) {
+    const labels = [...new Set(warnings.map(r => r.source))];
+    const preview = labels.slice(0, 5).join(', ') + (labels.length > 5 ? ` + ${labels.length - 5} more` : '');
+    add('info',
+      `${warnings.length} failed update${warnings.length > 1 ? 's' : ''} or installation${warnings.length > 1 ? 's' : ''}`,
+      `Check Windows Update history and application installer logs. Affected: ${escHtml(preview)}.`
+    );
+  }
+
   // 8. All quiet
-  if (findings.length === 0) {
+  if (!findings.some(f => f.sev === 'crit' || f.sev === 'warn')) {
     add('ok',
       'No significant issues detected',
-      'No recurring crashes, hangs, hardware indicators, or failed updates found in the reliability history.'
+      'No recurring crashes, hangs, hardware indicators, or post-install regressions found.'
     );
   }
 
@@ -245,11 +246,11 @@ function buildTicketNote(records, findings, generated) {
     `  Software Changes:  ${String(software).padStart(4)}`,
     `  Warnings:          ${String(warnings).padStart(4)}`,
     '',
-    `FINDINGS (${findings.filter(f => f.sev !== 'ok').length} issue${findings.filter(f => f.sev !== 'ok').length !== 1 ? 's' : ''})`,
+    `FINDINGS (${findings.filter(f => f.sev === 'crit' || f.sev === 'warn').length} issue${findings.filter(f => f.sev === 'crit' || f.sev === 'warn').length !== 1 ? 's' : ''})`,
     divider,
   ];
 
-  for (const f of findings) {
+  for (const f of findings.filter(f => f.sev === 'crit' || f.sev === 'warn' || f.sev === 'ok')) {
     const label = { crit: 'CRITICAL', warn: 'WARNING', ok: 'OK' }[f.sev] ?? f.sev;
     lines.push(`[${label}] ${stripHtml(f.title)}`);
     lines.push(stripHtml(f.detail));
@@ -311,7 +312,10 @@ function renderFindings(findings) {
     return;
   }
 
-  findingsPanel.innerHTML = findings.map(f => `
+  const primary   = findings.filter(f => f.sev === 'crit' || f.sev === 'warn' || f.sev === 'ok');
+  const secondary = findings.filter(f => f.sev === 'info');
+
+  const primaryHtml = primary.map(f => `
     <div class="incident-card">
       <div class="incident-header ${SEV_HEADER_CLS[f.sev] ?? ''}" style="cursor:default">
         <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.1em;color:${SEV_COLOR[f.sev] ?? '#8b949e'};flex-shrink:0">${SEV_LABEL[f.sev] ?? f.sev}</span>
@@ -320,13 +324,26 @@ function renderFindings(findings) {
       <div class="incident-body">
         <div class="incident-section">
           <p class="incident-text">${f.detail}</p>
-          ${f.extra ? `<div class="finding-events" style="margin-top:10px">${f.extra}</div>` : ''}
+          ${f.extra ? `<div class="finding-events">${f.extra}</div>` : ''}
         </div>
       </div>
     </div>
   `).join('');
 
-  tabFindingsCount.textContent = findings.filter(f => f.sev === 'crit' || f.sev === 'warn').length || '';
+  const secondaryHtml = secondary.length ? `
+    <div class="findings-notices">
+      ${secondary.map(f => `
+        <div class="findings-notice">
+          <span class="findings-notice-label">NOTE</span>
+          <span class="findings-notice-title">${f.title}</span>
+          <span class="findings-notice-detail">${f.detail}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '';
+
+  findingsPanel.innerHTML = primaryHtml + secondaryHtml;
+  tabFindingsCount.textContent = primary.filter(f => f.sev === 'crit' || f.sev === 'warn').length || '';
 }
 
 function renderRecordsTable(records, activeFilter) {
