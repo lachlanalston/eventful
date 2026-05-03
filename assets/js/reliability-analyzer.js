@@ -219,18 +219,19 @@ function renderOverview(records, generated) {
   const warnings = records.filter(r => r.impact === 'Warning').length;
   const reportDate = generated ? generated.slice(0, 10) : '—';
 
-  const stat = (num, label, cls) =>
-    `<div class="ob-stat ${cls}"><span class="ob-stat-num">${num}</span><span class="ob-stat-label">${label}</span></div>`;
+  const stat = (num, label, cls, filter) =>
+    `<div class="ob-stat ${cls}" data-filter="${filter}" style="cursor:pointer" title="Show ${label.toLowerCase()}">` +
+    `<span class="ob-stat-num">${num}</span><span class="ob-stat-label">${label}</span></div>`;
 
   overviewGrid.className = '';
   overviewGrid.innerHTML = `
     <div class="overview-bar">
       <div class="ob-stats">
-        ${stat(records.length, 'Total', 'stat-total')}
-        ${stat(crashes,  'Crashes',  crashes  > 0 ? 'stat-critical' : 'stat-total')}
-        ${stat(hangs,    'Hangs',    hangs    > 0 ? 'stat-error'    : 'stat-total')}
-        ${stat(software, 'Software', 'stat-info')}
-        ${stat(warnings, 'Warnings', warnings > 0 ? 'stat-warning'  : 'stat-total')}
+        ${stat(records.length, 'Total',    'stat-total',                                   'all')}
+        ${stat(crashes,  'Crashes',  crashes  > 0 ? 'stat-critical' : 'stat-total',        'crash')}
+        ${stat(hangs,    'Hangs',    hangs    > 0 ? 'stat-error'    : 'stat-total',        'hang')}
+        ${stat(software, 'Software', 'stat-info',                                          'software')}
+        ${stat(warnings, 'Warnings', warnings > 0 ? 'stat-warning'  : 'stat-total',        'warning')}
       </div>
       <div class="ob-divider"></div>
       <div style="display:flex;flex-direction:column;gap:2px">
@@ -239,6 +240,13 @@ function renderOverview(records, generated) {
       </div>
     </div>
   `;
+
+  overviewGrid.querySelectorAll('.ob-stat[data-filter]').forEach(el => {
+    el.addEventListener('click', () => {
+      switchToTab('records');
+      renderRecordsTable(records, el.dataset.filter);
+    });
+  });
 }
 
 const SEV_HEADER_CLS = { crit: 'sev-header-critical', warn: 'sev-header-warning', ok: 'sev-header-info' };
@@ -271,18 +279,26 @@ function renderFindings(findings) {
 
 function renderRecordsTable(records, activeFilter) {
   const cats = ['all', ...new Set(records.map(r => r.cat))];
+  if (records.some(r => r.impact === 'Warning')) cats.push('warning');
+
+  const chipLabel = c => c === 'all' ? 'All' : c === 'warning' ? 'Warnings' : (CAT_LABEL[c] ?? c);
+  const chipCount = c => c === 'all' ? records.length
+    : c === 'warning' ? records.filter(r => r.impact === 'Warning').length
+    : records.filter(r => r.cat === c).length;
+
   recordsFiltersWrap.innerHTML = `
     <div class="filter-bar">
       ${cats.map(c => `
         <button class="filter-chip${activeFilter === c ? ' active' : ''}" data-cat="${c}">
-          ${c === 'all' ? 'All' : (CAT_LABEL[c] ?? c)}
-          <span class="chip-count">${c === 'all' ? records.length : records.filter(r => r.cat === c).length}</span>
+          ${chipLabel(c)}<span class="chip-count">${chipCount(c)}</span>
         </button>
       `).join('')}
     </div>
   `;
 
-  const filtered = activeFilter === 'all' ? records : records.filter(r => r.cat === activeFilter);
+  const filtered = activeFilter === 'all'     ? records
+    : activeFilter === 'warning' ? records.filter(r => r.impact === 'Warning')
+    : records.filter(r => r.cat === activeFilter);
 
   if (!filtered.length) {
     recordsTableWrap.innerHTML = '<p class="no-results">No records for this filter.</p>';
@@ -320,14 +336,14 @@ function renderRecordsTable(records, activeFilter) {
 }
 
 // ─── Tab switching ────────────────────────────────────────────────────────────
+function switchToTab(name) {
+  document.querySelectorAll('.analyzer-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  findingsPanel.hidden = name !== 'findings';
+  recordsPanel.hidden  = name !== 'records';
+}
+
 document.querySelectorAll('.analyzer-tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.analyzer-tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    const target = tab.dataset.tab;
-    findingsPanel.hidden = target !== 'findings';
-    recordsPanel.hidden  = target !== 'records';
-  });
+  tab.addEventListener('click', () => switchToTab(tab.dataset.tab));
 });
 
 // ─── File handling ────────────────────────────────────────────────────────────
