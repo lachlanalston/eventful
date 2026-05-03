@@ -1,5 +1,6 @@
 import { setupTheme } from './theme.js';
 import { escHtml } from './utils.js';
+import { copyToClipboard } from './clipboard.js';
 
 setupTheme();
 
@@ -11,6 +12,7 @@ const resultsSection     = document.getElementById('results-section');
 const dropZone           = document.getElementById('drop-zone');
 const fileInput          = document.getElementById('file-input');
 const newAnalysisBtn     = document.getElementById('new-analysis-btn');
+const copyTicketBtn      = document.getElementById('copy-ticket-btn');
 const resultsSub         = document.getElementById('results-sub');
 const overviewGrid       = document.getElementById('overview-grid');
 const findingsPanel      = document.getElementById('findings-panel');
@@ -20,13 +22,13 @@ const recordsTableWrap   = document.getElementById('records-table-wrap');
 const tabFindingsCount   = document.getElementById('tab-findings-count');
 const tabRecordsCount    = document.getElementById('tab-records-count');
 
-// ─── Category classification (RelMonReport Problem field) ─────────────────────
+// ─── Classification ───────────────────────────────────────────────────────────
 function classifyEvent(problem) {
   const p = (problem || '').toLowerCase();
-  if (p.includes('stopped working'))                         return 'crash';
-  if (p.includes('stopped responding'))                      return 'hang';
-  if (/windows update|update/.test(p))                      return 'update';
-  if (/install|reconfigur|removal/.test(p))                 return 'software';
+  if (p.includes('stopped working'))         return 'crash';
+  if (p.includes('stopped responding'))      return 'hang';
+  if (/windows update|update/.test(p))       return 'update';
+  if (/install|reconfigur|removal/.test(p))  return 'software';
   return 'info';
 }
 
@@ -46,7 +48,6 @@ const CAT_COLOR = {
   info:     '#8b949e',
 };
 
-// Hardware failure keywords
 const HW_PATTERNS = [
   /bad.?block/i, /disk.?error/i, /ntfs.*corrupt/i, /corrupt.*ntfs/i,
   /hardware.?error/i, /memory.*corrupt/i, /corrupt.*memory/i,
@@ -54,7 +55,7 @@ const HW_PATTERNS = [
   /chkdsk/i, /file.?system.*error/i, /bad.?sector/i,
 ];
 
-// ─── XML parser — RelMonReport format (native Windows GUI export) ─────────────
+// ─── XML parser ───────────────────────────────────────────────────────────────
 function parseXml(text) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(text, 'application/xml');
@@ -66,8 +67,7 @@ function parseXml(text) {
   if (root.tagName !== 'RelMonReport') {
     throw new Error(
       `Unrecognised format — root element is <${root.tagName}>. ` +
-      `Expected <RelMonReport> from the Windows Reliability Monitor GUI export. ` +
-      `Open Reliability Monitor → Action → Save Reliability History.`
+      `Expected <RelMonReport>. Open Reliability Monitor → Action → Save Reliability History.`
     );
   }
 
@@ -78,20 +78,14 @@ function parseXml(text) {
     const impact  = get('Impact');
     const source  = get('Source');
     const problem = get('Problem');
-    return {
-      source,
-      product: source,
-      message: problem,
-      impact,
-      cat: classifyEvent(problem),
-    };
+    return { source, product: source, message: problem, impact, cat: classifyEvent(problem) };
   });
 
   if (!records.length) throw new Error('No events found in this Reliability Monitor export.');
   return { generated, records };
 }
 
-// ─── Findings engine ─────────────────────────────────────────────────────────
+// ─── Findings engine ──────────────────────────────────────────────────────────
 function analyse(records) {
   const findings = [];
   const add = (sev, title, detail, extra = '') =>
@@ -127,8 +121,8 @@ function analyse(records) {
     if (v.count >= 2) {
       add('warn',
         `${escHtml(v.label)} crashed ${v.count} time${v.count > 1 ? 's' : ''}`,
-        `Repeated crash pattern. Check for a pending application update, conflicting DLL, or corrupt installation. ` +
-        `Look for Event 1000 in the Application log for faulting module details.`
+        'Repeated crash pattern. Check for a pending application update, conflicting DLL, or corrupt installation. ' +
+        'Look for Event 1000 in the Application log for faulting module details.'
       );
     }
   }
@@ -144,8 +138,8 @@ function analyse(records) {
     if (v.count >= 2) {
       add('warn',
         `${escHtml(v.label)} stopped responding ${v.count} time${v.count > 1 ? 's' : ''}`,
-        `Repeated hang pattern. Common causes: main thread blocked on slow disk/network, deadlock, or antivirus scanning ` +
-        `files the app is trying to access. Try adding the app directory to AV exclusions as a test.`
+        'Repeated hang pattern. Common causes: main thread blocked on slow disk/network, deadlock, or antivirus ' +
+        'scanning files the app is trying to access. Try adding the app directory to AV exclusions as a test.'
       );
     }
   }
@@ -164,8 +158,8 @@ function analyse(records) {
   if (crashes.length >= 8 && !findings.some(f => f.sev === 'crit')) {
     add('warn',
       `High crash volume — ${crashes.length} application crashes recorded`,
-      `Unusually high number of application crash events. Consider running ` +
-      `<code>sfc /scannow</code> and <code>DISM /Online /Cleanup-Image /RestoreHealth</code> to check for system file corruption.`
+      'Unusually high number of application crash events. Consider running ' +
+      '<code>sfc /scannow</code> and <code>DISM /Online /Cleanup-Image /RestoreHealth</code> to check for system file corruption.'
     );
   }
 
@@ -177,33 +171,79 @@ function analyse(records) {
     );
   }
 
-  return findings.sort((a, b) => {
-    const order = { crit: 0, warn: 1, ok: 2 };
-    return (order[a.sev] ?? 3) - (order[b.sev] ?? 3);
-  });
+  return findings.sort((a, b) => ({ crit: 0, warn: 1, ok: 2 }[a.sev] ?? 3) - ({ crit: 0, warn: 1, ok: 2 }[b.sev] ?? 3));
 }
 
-// ─── Render helpers ──────────────────────────────────────────────────────────
+// ─── Ticket note builder ──────────────────────────────────────────────────────
+function buildTicketNote(records, findings, generated) {
+  const crashes  = records.filter(r => r.cat === 'crash').length;
+  const hangs    = records.filter(r => r.cat === 'hang').length;
+  const software = records.filter(r => r.cat === 'software').length;
+  const warnings = records.filter(r => r.impact === 'Warning').length;
+  const reportDate = generated ? generated.slice(0, 10) : 'unknown';
+  const divider = '─'.repeat(60);
+  const stripHtml = s => s.replace(/<[^>]+>/g, '');
+
+  const lines = [
+    'RELIABILITY ANALYSIS',
+    `Report Date: ${reportDate}`,
+    `Analysed via Eventful — eventful.lrfa.dev/reliability-analyzer.html`,
+    '',
+    'SUMMARY',
+    `  Total Events:      ${String(records.length).padStart(4)}`,
+    `  Crashes:           ${String(crashes).padStart(4)}`,
+    `  Hangs:             ${String(hangs).padStart(4)}`,
+    `  Software Changes:  ${String(software).padStart(4)}`,
+    `  Warnings:          ${String(warnings).padStart(4)}`,
+    '',
+    `FINDINGS (${findings.filter(f => f.sev !== 'ok').length} issue${findings.filter(f => f.sev !== 'ok').length !== 1 ? 's' : ''})`,
+    divider,
+  ];
+
+  for (const f of findings) {
+    const label = { crit: 'CRITICAL', warn: 'WARNING', ok: 'OK' }[f.sev] ?? f.sev;
+    lines.push(`[${label}] ${stripHtml(f.title)}`);
+    lines.push(stripHtml(f.detail));
+    lines.push('');
+  }
+
+  lines.push(divider);
+  return lines.join('\n');
+}
+
+// ─── Render helpers ───────────────────────────────────────────────────────────
 function renderOverview(records, generated) {
   const crashes  = records.filter(r => r.cat === 'crash').length;
   const hangs    = records.filter(r => r.cat === 'hang').length;
   const software = records.filter(r => r.cat === 'software').length;
   const warnings = records.filter(r => r.impact === 'Warning').length;
-
   const reportDate = generated ? generated.slice(0, 10) : '—';
 
-  const stat = (label, value, color = '') =>
-    `<div class="overview-stat">${color ? `<span class="overview-value" style="color:${color}">${value}</span>` : `<span class="overview-value">${value}</span>`}<span class="overview-label">${label}</span></div>`;
+  const stat = (num, label, cls) =>
+    `<div class="ob-stat ${cls}"><span class="ob-stat-num">${num}</span><span class="ob-stat-label">${label}</span></div>`;
 
-  overviewGrid.className = 'overview-grid';
-  overviewGrid.innerHTML =
-    stat('Total Events', records.length) +
-    stat('Crashes', crashes, crashes > 0 ? '#f85149' : '') +
-    stat('Hangs', hangs, hangs > 0 ? '#d29922' : '') +
-    stat('Software Changes', software, '#58a6ff') +
-    stat('Warnings', warnings, warnings > 0 ? '#d29922' : '') +
-    stat('Report Date', reportDate);
+  overviewGrid.className = '';
+  overviewGrid.innerHTML = `
+    <div class="overview-bar">
+      <div class="ob-stats">
+        ${stat(records.length, 'Total', 'stat-total')}
+        ${stat(crashes,  'Crashes',  crashes  > 0 ? 'stat-critical' : 'stat-total')}
+        ${stat(hangs,    'Hangs',    hangs    > 0 ? 'stat-error'    : 'stat-total')}
+        ${stat(software, 'Software', 'stat-info')}
+        ${stat(warnings, 'Warnings', warnings > 0 ? 'stat-warning'  : 'stat-total')}
+      </div>
+      <div class="ob-divider"></div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">Report date</span>
+        <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text2)">${escHtml(reportDate)}</span>
+      </div>
+    </div>
+  `;
 }
+
+const SEV_HEADER_CLS = { crit: 'sev-header-critical', warn: 'sev-header-warning', ok: 'sev-header-info' };
+const SEV_COLOR      = { crit: '#fb7185', warn: '#fbbf24', ok: '#3fb950' };
+const SEV_LABEL      = { crit: 'CRITICAL', warn: 'WARNING', ok: 'OK' };
 
 function renderFindings(findings) {
   if (!findings.length) {
@@ -211,22 +251,22 @@ function renderFindings(findings) {
     return;
   }
 
-  const sevLabel = { crit: 'CRITICAL', warn: 'WARNING', ok: 'OK' };
-  const sevColor = { crit: '#f85149', warn: '#d29922', ok: '#3fb950' };
-
   findingsPanel.innerHTML = findings.map(f => `
     <div class="incident-card">
-      <div class="incident-header">
-        <span class="incident-sev" style="color:${sevColor[f.sev] ?? '#8b949e'}">${sevLabel[f.sev] ?? f.sev}</span>
+      <div class="incident-header ${SEV_HEADER_CLS[f.sev] ?? ''}" style="cursor:default">
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:0.1em;color:${SEV_COLOR[f.sev] ?? '#8b949e'};flex-shrink:0">${SEV_LABEL[f.sev] ?? f.sev}</span>
         <span class="incident-title">${f.title}</span>
       </div>
-      <p class="incident-desc">${f.detail}</p>
-      ${f.extra ? `<div class="finding-events">${f.extra}</div>` : ''}
+      <div class="incident-body">
+        <div class="incident-section">
+          <p class="incident-text">${f.detail}</p>
+          ${f.extra ? `<div class="finding-events" style="margin-top:10px">${f.extra}</div>` : ''}
+        </div>
+      </div>
     </div>
   `).join('');
 
-  const warnCount = findings.filter(f => f.sev === 'crit' || f.sev === 'warn').length;
-  tabFindingsCount.textContent = warnCount > 0 ? warnCount : '';
+  tabFindingsCount.textContent = findings.filter(f => f.sev === 'crit' || f.sev === 'warn').length || '';
 }
 
 function renderRecordsTable(records, activeFilter) {
@@ -290,7 +330,7 @@ document.querySelectorAll('.analyzer-tab').forEach(tab => {
   });
 });
 
-// ─── File handling ───────────────────────────────────────────────────────────
+// ─── File handling ────────────────────────────────────────────────────────────
 function processFile(file) {
   if (!file) return;
 
@@ -304,7 +344,6 @@ function processFile(file) {
     try {
       processingText.textContent = 'Analysing…';
 
-      // Detect UTF-16 BOM and decode — native Windows GUI export is UTF-16 LE
       const buf   = e.target.result;
       const bytes = new Uint8Array(buf);
       let text;
@@ -329,6 +368,20 @@ function processFile(file) {
       renderFindings(findings);
       tabRecordsCount.textContent = records.length;
       renderRecordsTable(records, 'all');
+
+      // Wire copy button with current analysis data
+      copyTicketBtn.onclick = async () => {
+        const note = buildTicketNote(records, findings, generated);
+        const ok = await copyToClipboard(note);
+        if (ok) {
+          copyTicketBtn.classList.add('copied');
+          copyTicketBtn.textContent = '✓ Copied';
+          setTimeout(() => {
+            copyTicketBtn.classList.remove('copied');
+            copyTicketBtn.textContent = 'Copy ticket notes';
+          }, 2000);
+        }
+      };
 
     } catch (err) {
       processingSection.hidden = false;
@@ -358,7 +411,7 @@ function resetToUpload() {
   fileInput.value          = '';
 }
 
-// ─── Drop zone ───────────────────────────────────────────────────────────────
+// ─── Drop zone ────────────────────────────────────────────────────────────────
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
 dropZone.addEventListener('drop', e => {
