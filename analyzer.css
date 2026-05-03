@@ -2238,3 +2238,41 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
   .upload-hero h1 { font-size: 26px; }
   .drop-zone { padding: 32px 20px; }
 }
+
+/* ── Incident Analyzer — source status pills ─────────────────────────────── */
+.ia-source-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ia-source-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-family: var(--mono);
+  line-height: 1;
+}
+
+.ia-source-found  { border-color: rgba(52,211,153,0.25); background: rgba(52,211,153,0.06); }
+.ia-source-missing { border-color: var(--border); background: var(--surface2); opacity: 0.45; }
+
+.ia-source-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ia-source-found  .ia-source-dot  { background: #34d399; }
+.ia-source-missing .ia-source-dot { background: var(--text3); }
+
+.ia-source-label { color: var(--text2); }
+.ia-source-count { color: var(--text3); margin-left: 2px; }
+
+.filter-bar-sev { display: flex; gap: 6px; }
