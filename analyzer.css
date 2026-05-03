@@ -2276,3 +2276,17 @@ tr.row-expanded .ev-col-expand { color: var(--amber); }
 .ia-source-count { color: var(--text3); margin-left: 2px; }
 
 .filter-bar-sev { display: flex; gap: 6px; }
+
+.results-sub-note {
+  font-size: 12px;
+  color: var(--text3);
+  margin-top: 4px;
+}
+
+.results-sub-note a,
+.upload-error a,
+.processing-error a {
+  color: var(--amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

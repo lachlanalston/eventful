@@ -56,7 +56,14 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLookupP
 
 // ── Process File ──────────────────────────────────────────────────────────────
 async function processFile(file) {
-  if (!file.name.toLowerCase().endsWith('.xml') && file.type !== 'text/xml' && file.type !== 'application/xml') {
+  const lower = file.name.toLowerCase();
+
+  if (lower.endsWith('.zip')) {
+    showUploadError('This looks like a ZIP archive — use <a href="incident-analyzer.html">Windows Incident Analyser</a> to analyse multiple logs together.');
+    return;
+  }
+
+  if (!lower.endsWith('.xml') && file.type !== 'text/xml' && file.type !== 'application/xml') {
     showUploadError('Please upload an XML file exported from Windows Event Viewer.');
     return;
   }
@@ -65,6 +72,12 @@ async function processFile(file) {
 
   try {
     const text = await file.text();
+
+    if (text.includes('<RelMonReport')) {
+      showUploadError('This looks like a Reliability Monitor export — use <a href="reliability-analyzer.html">Reliability Analyser</a> instead.');
+      return;
+    }
+
     showProcessing('Parsing events…');
 
     // Yield to browser to update UI before heavy parse
@@ -1219,13 +1232,13 @@ function decodeKeywords(raw, names) {
 }
 
 // ── Error Display ─────────────────────────────────────────────────────────────
-function showUploadError(msg) {
+function showUploadError(html) {
   const existing = $dropZone?.querySelector('.upload-error');
   if (existing) existing.remove();
 
   const el = document.createElement('div');
   el.className = 'upload-error';
-  el.textContent = msg;
+  el.innerHTML = html;
   $dropZone?.appendChild(el);
   showSection($uploadSection);
 }

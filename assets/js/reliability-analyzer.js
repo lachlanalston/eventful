@@ -65,6 +65,9 @@ function parseXml(text) {
 
   const root = doc.documentElement;
   if (root.tagName !== 'RelMonReport') {
+    if (root.tagName === 'Events' || doc.querySelector('Event > System')) {
+      throw new Error('WRONG_TOOL:event_log');
+    }
     throw new Error(
       `Unrecognised format — root element is <${root.tagName}>. ` +
       `Expected <RelMonReport>. Open Reliability Monitor → Action → Save Reliability History.`
@@ -418,8 +421,27 @@ document.querySelectorAll('.analyzer-tab').forEach(tab => {
 });
 
 // ─── File handling ────────────────────────────────────────────────────────────
+function showParseError(title, bodyHtml) {
+  uploadSection.hidden     = true;
+  processingSection.hidden = false;
+  processingSection.innerHTML = `
+    <p class="processing-error">
+      <strong>${escHtml(title)}</strong><br>
+      ${bodyHtml}
+    </p>
+    <button class="btn-secondary" style="margin-top:1rem" id="retry-btn">← Try another file</button>
+  `;
+  document.getElementById('retry-btn')?.addEventListener('click', resetToUpload);
+}
+
 function processFile(file) {
   if (!file) return;
+
+  if (file.name.toLowerCase().endsWith('.zip')) {
+    showParseError('Wrong file type',
+      'This looks like a ZIP archive — use <a href="incident-analyzer.html">Windows Incident Analyser</a> to analyse multiple logs together.');
+    return;
+  }
 
   uploadSection.hidden     = true;
   processingSection.hidden = false;
@@ -471,17 +493,14 @@ function processFile(file) {
       };
 
     } catch (err) {
-      processingSection.hidden = false;
-      processingText.textContent = '';
-      processingSection.innerHTML = `
-        <p class="processing-error">
-          <strong>Could not parse file</strong><br>
-          ${escHtml(err.message)}<br>
-          <span style="font-size:0.82rem;color:var(--text-muted)">Open Reliability Monitor → Action → Save Reliability History to export the correct file.</span>
-        </p>
-        <button class="btn-secondary" style="margin-top:1rem" id="retry-btn">← Try another file</button>
-      `;
-      document.getElementById('retry-btn')?.addEventListener('click', resetToUpload);
+      if (err.message === 'WRONG_TOOL:event_log') {
+        showParseError('Wrong file type',
+          'This looks like a Windows Event Log export — use <a href="windows-log-analyzer.html">Windows Log Analyser</a> instead.');
+      } else {
+        showParseError('Could not parse file',
+          `${escHtml(err.message)}<br>` +
+          `<span style="font-size:0.82rem;color:var(--text-muted)">Open Reliability Monitor → Action → Save Reliability History to export the correct file.</span>`);
+      }
     }
   };
   reader.readAsArrayBuffer(file);

@@ -148,6 +148,9 @@ async function extractZip(file) {
       logData.reliability = parseRelMon(buf);
       if (!logData.reliability) throw new Error('Could not parse Reliability Monitor XML.');
       logData.missing.push('system', 'application', 'security', 'setup');
+      logData._singleFileSuggestion =
+        'Only Reliability Monitor data loaded. For a full incident analysis upload the ZIP from Get-EventLogExport.ps1. ' +
+        'To analyse just this file, use <a href="reliability-analyzer.html">Reliability Analyser</a>.';
     } else {
       const events = parseEventXML(text);
       const ch = events[0]?.channel?.toLowerCase() || '';
@@ -157,6 +160,9 @@ async function extractZip(file) {
       else if (ch.includes('setup'))       logData.setup       = events;
       else                                 logData.system      = events;
       logData.missing.push('application', 'security', 'setup', 'reliability');
+      logData._singleFileSuggestion =
+        `Single log loaded (${events[0]?.channel || 'unknown channel'}). For a full incident analysis upload the ZIP from Get-EventLogExport.ps1. ` +
+        'To analyse a single log, use <a href="windows-log-analyzer.html">Windows Log Analyser</a>.';
     }
   } else {
     throw new Error('Unsupported file type. Upload a ZIP archive or an XML event log.');
@@ -430,6 +436,13 @@ function render(logData, findings) {
   parts.push(`${total.toLocaleString()} events across ${4 - missing.filter(m => ['system','application','security','setup'].includes(m)).length} log${4 - missing.filter(m => ['system','application','security','setup'].includes(m)).length !== 1 ? 's' : ''}`);
   if (reliability) parts.push('+ Reliability Monitor');
   resultsSub.textContent = parts.join(' · ');
+
+  if (logData._singleFileSuggestion) {
+    const note = document.createElement('p');
+    note.className = 'results-sub-note';
+    note.innerHTML = logData._singleFileSuggestion;
+    resultsSub.insertAdjacentElement('afterend', note);
+  }
 
   renderOverview(logData, findings);
 
