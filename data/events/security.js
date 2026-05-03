@@ -1896,5 +1896,1043 @@ Get-WinEvent -FilterHashtable @{
     Sort-Object TimeCreated -Descending | Format-List`,
     related_ids: [104, 4624, 4672],
     ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-1102'
+  },
+
+  {
+    id: 4946,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Intermediate',
+    title: 'Windows Firewall Rule Added',
+    short_desc: 'A rule was added to the Windows Firewall exception list — records who added it and what was allowed.',
+    description: 'Event 4946 is generated whenever a new rule is added to the Windows Firewall. It records the profile (Domain, Private, Public), the rule name, and the account that added it. This event is invaluable for auditing unauthorized firewall changes — if a user or malware adds an inbound allow rule to bypass security controls, this event captures it. On managed endpoints, firewall rules should only be changed by Group Policy or by authorized IT personnel; any unexpected 4946 is worth investigating.',
+    why_it_happens: 'Windows logs this event when any process or user with sufficient privilege adds a firewall rule via Windows Defender Firewall with Advanced Security, netsh advfirewall, PowerShell New-NetFirewallRule, or the Windows Firewall API. Malware and remote access tools often add inbound rules to maintain access.',
+    what_good_looks_like: 'Firewall rule additions should match known maintenance windows, software installations, or GPO pushes. Any rule added outside these windows or from an unexpected account needs investigation.',
+    common_mistakes: [
+      'Not auditing Windows Firewall changes at all — these events only appear if "Audit Policy Change" auditing is enabled',
+      'Not correlating 4946 with the process that created the rule — a rule added by cmd.exe or powershell.exe under a user account is suspicious',
+      'Missing that software installers routinely add firewall exceptions — checking the rule name often clarifies whether it is legitimate'
+    ],
+    causes: [
+      'Software installation adding a firewall exception for its service or port',
+      'Administrator manually adding an exception for a new application',
+      'Group Policy pushing a new firewall rule',
+      'Malware or unauthorized remote access tool adding an inbound allow rule',
+      'RMM tool or monitoring agent adding its required ports'
+    ],
+    steps: [
+      'Check the rule name in Event 4946 — legitimate software usually names rules clearly',
+      'Check the Subject Account Name — was it a service, an admin, or a user account?',
+      'Cross-reference with Event 4688 (process creation) at the same time to see which process added the rule',
+      'View the current rule: Get-NetFirewallRule -DisplayName "<rule name>" | Get-NetFirewallPortFilter',
+      'If the rule is unauthorized: Remove-NetFirewallRule -DisplayName "<rule name>"',
+      'Check for Event 4948 (rule deleted) to see if rules are being toggled on and off'
+    ],
+    symptoms: [
+      'firewall rule added',
+      'new firewall exception created',
+      'who added firewall rule',
+      'firewall change audit',
+      'firewall rule modification',
+      'unauthorized firewall rule',
+      'firewall exception added by software',
+      'malware added firewall rule',
+      'firewall rules changed',
+      'audit firewall changes'
+    ],
+    tags: ['firewall', 'audit', 'policy-change', 'security', 'network', 'rule'],
+    powershell: `# Firewall rule change audit
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Security'
+    Id      = @(4946, 4947, 4948, 4950)
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        EventId     = $_.Id
+        RuleName    = ($data | Where-Object Name -eq 'RuleName').'#text'
+        Account     = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4948, 4950, 4954, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4946'
+  },
+
+  {
+    id: 4948,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Windows Firewall Rule Deleted',
+    short_desc: 'A firewall rule was deleted — if it was a protective rule, this may open a security gap.',
+    description: 'Event 4948 is generated when a Windows Firewall rule is deleted. While adding rules (4946) is the typical concern for malware, deleting rules is equally important — an attacker may delete inbound block rules or outbound restriction rules to open communication channels. It is also common for misconfigured software uninstallers to delete firewall rules that were not theirs. The event records the rule name, profile, and the account that performed the deletion.',
+    why_it_happens: 'Rule deletion occurs via the Windows Firewall console, netsh advfirewall delete rule, Remove-NetFirewallRule in PowerShell, or the Windows Firewall API. Software uninstallers routinely delete their own rules, but deletion of rules named after security tools or baseline policies is suspicious.',
+    what_good_looks_like: 'Rule deletions matching software uninstallation events or known maintenance. Any deletion of a rule you do not recognize, or a deletion that correlates with suspicious activity, requires investigation.',
+    common_mistakes: [
+      'Not correlating with Event 4688 (process creation) to see which process deleted the rule',
+      'Not checking what the deleted rule was protecting against — some rules block known attack vectors',
+      'Assuming rule deletion is always benign because uninstallers delete rules routinely'
+    ],
+    causes: [
+      'Software uninstaller removing its own firewall exception',
+      'Administrator cleaning up stale firewall rules',
+      'Malware or attacker removing a blocking rule to open a port',
+      'Group Policy overwriting and removing locally-created rules'
+    ],
+    steps: [
+      'Check the rule name in Event 4948 — does the name correspond to known software?',
+      'Check the Subject Account Name — admin, service, or user account?',
+      'Cross-reference with software uninstall events (Event 1033 in Application log) at the same time',
+      'If the deleted rule protected an important service: recreate it: New-NetFirewallRule with appropriate parameters',
+      'Check if Event 4946 (rule added) follows 4948 closely — rules being replaced may indicate legitimate reconfiguration'
+    ],
+    symptoms: [
+      'firewall rule deleted',
+      'firewall rule removed',
+      'who deleted firewall rule',
+      'firewall rule missing',
+      'firewall exception removed',
+      'security rule deleted',
+      'firewall change',
+      'audit firewall deletion'
+    ],
+    tags: ['firewall', 'audit', 'policy-change', 'security', 'network', 'rule', 'deletion'],
+    powershell: `# Firewall rule deletion audit — last 7 days
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4948
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        RuleName    = ($data | Where-Object Name -eq 'RuleName').'#text'
+        Profile     = ($data | Where-Object Name -eq 'ProfileChanged').'#text'
+        Account     = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4946, 4950, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4948'
+  },
+
+  {
+    id: 4950,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Warning',
+    skill_level: 'Intermediate',
+    title: 'Windows Firewall Setting Changed',
+    short_desc: 'A Windows Firewall setting was changed — could indicate the firewall was disabled, a profile was changed, or default action was modified.',
+    description: 'Event 4950 is generated when a Windows Firewall setting (not a rule, but a global setting) is changed. This includes changes to whether the firewall is enabled/disabled per profile, the default inbound/outbound action, notifications settings, or unicast responses to multicast. Disabling the Windows Firewall via this mechanism generates Event 4950. This is a higher-severity event than 4946/4948 because it affects the overall firewall posture rather than a single rule.',
+    why_it_happens: 'Firewall setting changes occur via the Windows Defender Firewall control panel, Group Policy, netsh advfirewall set, or the Windows Security Center API. Attackers and malware commonly disable the firewall entirely to simplify outbound communication.',
+    what_good_looks_like: 'No unexpected 4950 events. Firewall settings should only change during controlled maintenance or Group Policy updates. Any 4950 outside a maintenance window — especially if it shows the firewall being disabled — is a priority investigation.',
+    common_mistakes: [
+      'Not checking which setting changed — disabling the firewall vs enabling logging are very different severity levels',
+      'Not correlating with the account that made the change — user accounts should not be disabling the firewall'
+    ],
+    causes: [
+      'Administrator disabling the firewall for troubleshooting (and forgetting to re-enable it)',
+      'Group Policy changing firewall profile settings',
+      'Malware disabling the firewall to reduce detection or enable inbound connections',
+      'Software installation modifying firewall defaults'
+    ],
+    steps: [
+      'Read Event 4950 carefully to identify which setting changed',
+      'If the firewall was disabled: re-enable it immediately via Group Policy or Set-NetFirewallProfile -Enabled True',
+      'Check the Subject Account Name — who or what made the change?',
+      'Cross-reference with Event 4688 to identify the process that triggered the change',
+      'If firewall was disabled by non-admin: investigate for malware — check Event 4688 for suspicious process activity around the same time'
+    ],
+    symptoms: [
+      'windows firewall disabled',
+      'firewall turned off',
+      'firewall settings changed',
+      'who disabled the firewall',
+      'firewall profile changed',
+      'firewall configuration changed',
+      'windows firewall setting modified',
+      'firewall default action changed'
+    ],
+    tags: ['firewall', 'audit', 'security', 'policy-change', 'disabled', 'network'],
+    powershell: `# Firewall settings change audit and current state
+# Eventful
+
+# Current firewall state per profile
+Get-NetFirewallProfile | Select-Object Name, Enabled, DefaultInboundAction, DefaultOutboundAction
+
+# Firewall setting change events — last 7 days
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = @(4950, 4954)
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, Id, Message |
+    Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [4946, 4948, 4954],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4950'
+  },
+
+  {
+    id: 5140,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Intermediate',
+    title: 'Network Share Accessed',
+    short_desc: 'A network share was accessed — records who connected, from where, and which share.',
+    description: 'Event 5140 is generated when a user successfully connects to a network share. It records the account name, the source IP address, the share name, and the access type. This is a key event for auditing who is accessing shared folders on a file server or domain controller. On a DC, share access to ADMIN$, C$, or IPC$ from unexpected accounts or IPs is a significant security concern — these are common targets for lateral movement and credential theft tools like Mimikatz. Note: Object Access auditing must be enabled for this event to appear.',
+    why_it_happens: 'Windows logs this event when the SMB server service accepts a connection to a share. It fires on the server side, meaning the event appears on the file server being accessed, not on the client initiating the connection.',
+    what_good_looks_like: 'Share access matching expected file server activity. Investigate: access to ADMIN$ or C$ from workstations (administrative shares should only be accessed by IT), access outside business hours, access from unexpected source IPs, bulk access events from a single account.',
+    common_mistakes: [
+      'Not enabling Object Access auditing — Event 5140 requires "Audit File Share" auditing to be enabled under Advanced Audit Policy',
+      'Not checking the Share Name field — access to IPC$, ADMIN$, or C$ is much more significant than access to a named share',
+      'Not correlating source IP with a known device — source IP identifies the accessing machine'
+    ],
+    causes: [
+      'User accessing a file server share (normal operation)',
+      'IT admin connecting to ADMIN$ or C$ for remote management',
+      'Backup software accessing shares to back up data',
+      'Lateral movement — attacker using stolen credentials to access shares on other machines',
+      'Worm or ransomware scanning and accessing network shares'
+    ],
+    steps: [
+      'Confirm Audit File Share is enabled: secpol.msc → Advanced Audit Policy → Object Access → Audit File Share',
+      'Filter Security log for Event 5140',
+      'Note the Share Name — ADMIN$, C$, and IPC$ are high-value targets',
+      'Note the Source Address — which machine is connecting?',
+      'Correlate unexpected share access with Event 4624 (logon) at the same time — verify the logon type and source IP match',
+      'For suspicious lateral movement: check if the same source IP is accessing shares on multiple machines'
+    ],
+    symptoms: [
+      'who accessed shared folder',
+      'network share access audit',
+      'file share access log',
+      'who connected to file server',
+      'audit share access',
+      'who accessed admin share',
+      'network share audit trail',
+      'lateral movement file share',
+      'unauthorized share access',
+      'ransomware accessing shares'
+    ],
+    tags: ['share', 'audit', 'smb', 'file-server', 'lateral-movement', 'security', 'network'],
+    powershell: `# Network share access audit
+# Eventful
+# Note: Requires "Audit File Share" enabled in Advanced Audit Policy
+
+$startTime = (Get-Date).AddHours(-24)
+
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Security'
+    Id      = 5140
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated  = $_.TimeCreated
+        Account      = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+        ShareName    = ($data | Where-Object Name -eq 'ShareName').'#text'
+        SourceIP     = ($data | Where-Object Name -eq 'IpAddress').'#text'
+        AccessType   = ($data | Where-Object Name -eq 'AccessMask').'#text'
+    }
+} | Where-Object { $_.ShareName -notlike '*IPC*' } |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [5145, 4624, 4625, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-5140'
+  },
+
+  {
+    id: 5145,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Network Share File Access Check',
+    short_desc: 'A check was made to see if a client can access specific files or folders within a network share — high-volume but granular audit trail.',
+    description: 'Event 5145 is generated when Windows checks whether a client can access a specific file or folder within a network share. Where Event 5140 fires once per share connection, Event 5145 fires for each individual file or folder access check within that share. This means 5145 is extremely high-volume on active file servers — a user browsing a share generates hundreds of these events. Its value is forensic: when investigating a specific incident, 5145 tells you exactly which files were accessed or attempted, not just that the share was connected.',
+    why_it_happens: 'Every file or folder access within a network share is preceded by an access check. Windows Audit generates Event 5145 to record these checks for both successful and failed access (the failure case — "Access Denied" on a file within an accessible share — is particularly valuable for investigating unauthorized access attempts).',
+    what_good_looks_like: 'High volume is normal. Look for 5145 with "Access Denied" result (denied checks) for files the user should not be accessing, or bulk file access (hundreds of unique files in a short time window — ransomware indicator).',
+    common_mistakes: [
+      'Enabling 5145 on a busy file server without filtering — it will generate millions of events per day and overwhelm the Security log',
+      'Confusing 5145 volume (access checks) with 5140 (share connections) — they are different levels of granularity',
+      'Not filtering for failed access checks — success events are mostly noise, but Denied events pinpoint unauthorized access attempts'
+    ],
+    causes: [
+      'Normal file server access (high volume, expected)',
+      'Ransomware enumerating and accessing all files on a share (burst of access events across many files in seconds)',
+      'Data exfiltration — bulk file access by a single account',
+      'Unauthorized access attempt — access denied results on restricted folders'
+    ],
+    steps: [
+      'Enable Audit Detailed File Share under Advanced Audit Policy if 5145 events are not appearing',
+      'When investigating: filter 5145 for the specific account, IP, and time window',
+      'Look for "Access Denied" (failure) events — these reveal which files a user tried but failed to access',
+      'For ransomware investigation: count unique file paths accessed per minute — ransomware generates hundreds per second',
+      'Use Event 5140 first (share-level) to narrow down which share to investigate, then drill into 5145'
+    ],
+    symptoms: [
+      'which files were accessed on file server',
+      'file access audit',
+      'who accessed specific file',
+      'file server detailed audit',
+      'ransomware file access log',
+      'unauthorized file access',
+      'file access denied log',
+      'bulk file access audit',
+      'data exfiltration investigation',
+      'file access forensics'
+    ],
+    tags: ['share', 'audit', 'smb', 'file-access', 'forensics', 'security', 'ransomware'],
+    powershell: `# Detailed file share access — filter for denied checks or specific account
+# Eventful
+# Note: Very high volume on active servers — always filter by time and account
+
+$targetAccount = 'username'  # Replace with account to investigate
+$startTime     = (Get-Date).AddHours(-2)
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 5145
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    $acct = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+    if ($acct -like "*$targetAccount*") {
+        [PSCustomObject]@{
+            TimeCreated  = $_.TimeCreated
+            Account      = $acct
+            Share        = ($data | Where-Object Name -eq 'ShareName').'#text'
+            RelativePath = ($data | Where-Object Name -eq 'RelativeTargetName').'#text'
+            AccessMask   = ($data | Where-Object Name -eq 'AccessMask').'#text'
+        }
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [5140, 4624, 4625],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-5145'
+  },
+
+  {
+    id: 4103,
+    source: 'Microsoft-Windows-PowerShell',
+    channel: 'Microsoft-Windows-PowerShell/Operational',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'PowerShell: Module Logging — Command Executed',
+    short_desc: 'Records every PowerShell command and pipeline output when module logging is enabled — key for security investigations.',
+    description: 'Event 4103 is generated when PowerShell module logging is enabled and a PowerShell command or pipeline executes. It captures the full command input, the module name, and the output. Module logging provides visibility into PowerShell activity at the command level — including commands run by scripts, remote sessions, and constrained language mode bypasses. For security investigations, 4103 events reveal what commands an attacker or malware ran via PowerShell, even if the script attempted to evade detection. This log must be explicitly enabled via Group Policy or the registry.',
+    why_it_happens: 'Module logging is configured via Group Policy (Computer Configuration → Administrative Templates → Windows Components → Windows PowerShell → Turn on Module Logging) or the registry. When enabled, the PowerShell engine writes each command and its output to the Operational log.',
+    what_good_looks_like: 'In a security-conscious environment, 4103 provides an audit trail of all PowerShell activity. Focus investigation on: commands run outside business hours, commands run by unexpected accounts, commands accessing sensitive paths or registry locations, commands using encoded or obfuscated parameters.',
+    common_mistakes: [
+      'Enabling module logging without also enabling script block logging (4104) — both together give the most complete picture',
+      'Forgetting to enable module logging via GPO first — no 4103 events appear without it',
+      'Not filtering by account or time window — 4103 is very high-volume on busy systems'
+    ],
+    causes: [
+      'Any PowerShell command execution when module logging is enabled',
+      'PowerShell remoting commands (Enter-PSSession, Invoke-Command)',
+      'Scheduled tasks running PowerShell scripts',
+      'Malware using PowerShell as its execution engine'
+    ],
+    steps: [
+      'Enable module logging: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ModuleLogging → EnableModuleLogging = 1',
+      'Open Event Viewer → Applications and Services → Microsoft → Windows → PowerShell → Operational',
+      'Filter for Event ID 4103',
+      'When investigating: filter by account name and time window',
+      'Look for encoded commands: -EncodedCommand or [System.Convert]::FromBase64String — these are obfuscation red flags',
+      'Correlate with Event 4104 (script block logging) for the full script content'
+    ],
+    symptoms: [
+      'what powershell commands were run',
+      'powershell audit log',
+      'powershell command history audit',
+      'who ran powershell',
+      'powershell activity log',
+      'powershell security audit',
+      'powershell logging',
+      'investigate powershell commands',
+      'malware used powershell',
+      'powershell module logging'
+    ],
+    tags: ['powershell', 'audit', 'security', 'logging', 'module-logging', 'forensics'],
+    powershell: `# PowerShell module logging — recent commands
+# Eventful
+# Note: Requires module logging enabled via GPO or registry
+
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Microsoft-Windows-PowerShell/Operational'
+    Id           = 4103
+    StartTime    = (Get-Date).AddHours(-24)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, UserId, Message |
+    Sort-Object TimeCreated -Descending |
+    Select-Object -First 50 | Format-List`,
+    related_ids: [4104, 4688, 4624],
+    ms_docs: 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_logging_windows'
+  },
+
+  {
+    id: 4104,
+    source: 'Microsoft-Windows-PowerShell',
+    channel: 'Microsoft-Windows-PowerShell/Operational',
+    severity: 'Warning',
+    skill_level: 'Advanced',
+    title: 'PowerShell: Script Block Logging — Script Content Captured',
+    short_desc: 'The full text of a PowerShell script block was logged — critical for investigating what malicious or suspicious scripts actually contained.',
+    description: 'Event 4104 captures the complete text of PowerShell script blocks as they are compiled — including dynamically constructed scripts, obfuscated payloads that have been decoded, and commands passed via -EncodedCommand (PowerShell automatically decodes and logs the plaintext). This makes 4104 the most powerful PowerShell security event: even heavily obfuscated malware reveals its true content in the 4104 log. Windows automatically logs 4104 for script blocks containing suspicious keywords (like Invoke-Mimikatz, Invoke-WebRequest to unusual URLs, etc.) regardless of whether full script block logging is enabled. Full logging captures everything.',
+    why_it_happens: 'Script block logging is enabled via Group Policy or the registry. Windows also has automatic "suspicious script detection" that generates 4104 warnings for script content matching known attack patterns — these appear even without full logging being enabled, which is why 4104 sometimes appears without 4103.',
+    what_good_looks_like: 'In a well-defended environment, 4104 is enabled for all PowerShell execution. Severity Warning events (Windows automatically flagged the content as suspicious) need immediate attention. Look for: encoded command decodes, calls to Invoke-Expression or iex, downloads from the internet (Invoke-WebRequest, System.Net.WebClient), reflection and memory injection patterns.',
+    common_mistakes: [
+      'Not enabling script block logging, relying only on module logging (4103) — 4103 shows commands but not full script content',
+      'Ignoring Warning-level 4104 events that Windows automatically generated — these are pre-filtered for suspicious content',
+      'Not checking that the decoded content of -EncodedCommand is visible in the 4104 body — PowerShell decodes before logging'
+    ],
+    causes: [
+      'Any PowerShell script execution when script block logging is enabled',
+      'Automatically generated by Windows when script content matches suspicious patterns (even without full logging)',
+      'PowerShell-based malware, fileless malware, or post-exploitation frameworks (Cobalt Strike, Metasploit)',
+      'Legitimate administrative scripts (high volume)'
+    ],
+    steps: [
+      'Enable full script block logging: HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging → EnableScriptBlockLogging = 1',
+      'Filter Event Viewer for 4104 with Level = Warning — Windows pre-flagged these as suspicious',
+      'Read the script block content in the event body — look for encoded strings, web downloads, and injection patterns',
+      'Cross-reference the User SID and timestamp with Event 4624 (logon) to establish who ran the script',
+      'If malicious content found: run a full EDR/AV scan immediately and investigate the account for compromise',
+      'Combine with 4103 events to reconstruct the full execution context'
+    ],
+    symptoms: [
+      'what did powershell script do',
+      'powershell script content',
+      'malicious powershell script',
+      'powershell script block logging',
+      'investigate powershell script',
+      'powershell obfuscated command',
+      'encoded powershell command',
+      'powershell malware investigation',
+      'fileless malware powershell',
+      'powershell script captured',
+      'invoke-expression powershell audit',
+      'cobalt strike powershell'
+    ],
+    tags: ['powershell', 'security', 'logging', 'script-block', 'malware', 'forensics', 'advanced'],
+    powershell: `# PowerShell script block logging — recent and suspicious entries
+# Eventful
+# Note: Requires script block logging enabled. Warning-level events appear automatically for suspicious content.
+
+# Warning-level 4104 events (auto-flagged as suspicious by Windows)
+Get-WinEvent -FilterHashtable @{
+    LogName      = 'Microsoft-Windows-PowerShell/Operational'
+    Id           = 4104
+    Level        = 3   # 3 = Warning
+    StartTime    = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue |
+    Select-Object TimeCreated, UserId, Message |
+    Sort-Object TimeCreated -Descending | Format-List
+
+# All 4104 events (requires full script block logging enabled)
+# Get-WinEvent -FilterHashtable @{ LogName = 'Microsoft-Windows-PowerShell/Operational'; Id = 4104; StartTime = (Get-Date).AddDays(-1) } -ErrorAction SilentlyContinue | Select-Object TimeCreated, UserId, Message | Sort-Object TimeCreated -Descending | Select-Object -First 20 | Format-List`,
+    related_ids: [4103, 4688, 4624, 4625],
+    ms_docs: 'https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_logging_windows'
+  },
+
+  {
+    id: 4634,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Fundamental',
+    title: 'Account Logoff',
+    short_desc: 'A user or service account logged off — session ended.',
+    description: 'Event 4634 is generated when a logon session ends. It is paired with Event 4624 (logon) to form a complete session record. For interactive sessions you can calculate session duration by matching 4634 to 4624 using the Logon ID. For network logons (Type 3), 4634 events are very frequent and generally not individually significant. Note: for interactive logons, Windows may instead log Event 4647 (user-initiated logoff) and omit 4634.',
+    why_it_happens: 'Windows generates this event when the Security Account Manager (SAM) or Kerberos package terminates a logon session — either because the user explicitly logged off, because the session timed out, or because the system is shutting down. High-volume environments see thousands of Type 3 logoff events per hour.',
+    what_good_looks_like: 'Each 4634 paired with a corresponding 4624 using matching Logon ID. Session durations reasonable for the account type and logon type.',
+    common_mistakes: [
+      'Treating 4634 as meaningful for every Type 3 network logon — these are extremely noisy on file servers',
+      'Expecting 4634 for all interactive sessions — Windows often logs 4647 instead for user-initiated logoffs',
+      'Not matching by Logon ID when calculating session duration'
+    ],
+    causes: [
+      'User clicked Start → Sign Out or switched user',
+      'Session timeout (screensaver lock + idle policy)',
+      'System shutdown or restart',
+      'Network session expired or connection dropped',
+      'Service or batch job logon session terminated'
+    ],
+    steps: [
+      'Match to corresponding 4624 using Logon ID to determine session duration',
+      'Check Logon Type — Type 10 logoffs are RDP sessions ending',
+      'Filter by Account Name for a specific user\'s logoff history',
+      'Cross-reference with 4647 for interactive logoffs'
+    ],
+    symptoms: [
+      'user logged off',
+      'when did user log off',
+      'session ended',
+      'logoff history',
+      'account sign out audit',
+      'user session duration'
+    ],
+    tags: ['authentication', 'logoff', 'audit', 'session', 'security'],
+    powershell: `# Logon/Logoff Session History
+# Eventful
+
+$computer  = $env:COMPUTERNAME
+$startTime = (Get-Date).AddDays(-1)
+$targetUser = ''  # Optional: filter by username
+
+Get-WinEvent -ComputerName $computer -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = @(4624, 4634, 4647)
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        EventId     = $_.Id
+        Account     = ($data | Where-Object Name -eq 'TargetUserName').'#text'
+        LogonType   = ($data | Where-Object Name -eq 'LogonType').'#text'
+        LogonId     = ($data | Where-Object Name -eq 'TargetLogonId').'#text'
+    }
+} | Where-Object { -not $targetUser -or $_.Account -eq $targetUser } |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4624, 4647, 4648],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4634'
+  },
+
+  {
+    id: 4647,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Fundamental',
+    title: 'User-Initiated Logoff',
+    short_desc: 'A user explicitly initiated a logoff from an interactive session.',
+    description: 'Event 4647 is generated when a user explicitly initiates logoff from an interactive session (Types 2, 10, 11). Unlike Event 4634 which covers all session terminations, 4647 specifically indicates a deliberate user action. For sensitive accounts, seeing a 4647 outside of business hours may indicate unauthorized interactive access. 4647 is often the last event logged before a workstation is locked or user profile is unloaded.',
+    why_it_happens: 'Generated by Windows when the user selects "Sign out", "Switch User", or initiates a logoff via keyboard shortcut. For RDP sessions, it is generated when the user closes the RDP client and disconnects from the session.',
+    what_good_looks_like: 'Logoffs for interactive sessions during expected hours. Admin accounts logging off from servers after completing work.',
+    common_mistakes: [
+      'Confusing 4647 with 4634 — 4647 is user-initiated only; 4634 covers all session ends including timeouts and shutdowns'
+    ],
+    causes: [
+      'User clicked Start → Sign Out',
+      'User disconnected an RDP session',
+      'Logoff initiated by IT via Group Policy or remote management',
+      'Automated logoff script ran at end of day'
+    ],
+    steps: [
+      'Check Account Name and time — was this during expected hours?',
+      'Check Logon ID and correlate with 4624 to determine total session time',
+      'For RDP: cross-reference with 4778 (reconnect) and 24 (TS disconnect) events'
+    ],
+    symptoms: [
+      'user logged off',
+      'who signed out',
+      'interactive logoff',
+      'user session ended',
+      'user sign out audit'
+    ],
+    tags: ['authentication', 'logoff', 'interactive', 'audit', 'security'],
+    powershell: `# User-Initiated Logoff History
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4647
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        Account     = ($data | Where-Object Name -eq 'TargetUserName').'#text'
+        Domain      = ($data | Where-Object Name -eq 'TargetDomainName').'#text'
+        LogonId     = ($data | Where-Object Name -eq 'TargetLogonId').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4624, 4634, 4778],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4647'
+  },
+
+  {
+    id: 4657,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Registry Value Modified',
+    short_desc: 'A registry value was created, modified, or deleted — requires object access auditing on the key.',
+    description: 'Event 4657 is generated when a registry value is created, modified, or deleted on a key that has been configured for auditing via SACL (System Access Control List). This event captures the old and new value data, the process that made the change, and the user account responsible. It is essential for tracking unauthorized configuration changes, malware persistence mechanisms (run keys), and software modifications. Requires "Audit Registry" subcategory enabled AND a SACL on the specific key.',
+    why_it_happens: 'Not generated for all registry writes — only for keys where a SACL audit entry has been configured. Security tools, Group Policy, and HIPS solutions often configure SACLs on sensitive keys like HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run, HKLM\\SYSTEM, and HKLM\\SAM. Malware commonly modifies run keys for persistence, which this event captures.',
+    what_good_looks_like: 'Authorized software installs, Windows Updates, and GPO changes appearing in 4657. Unknown processes or user accounts modifying sensitive keys should be investigated.',
+    common_mistakes: [
+      'Expecting 4657 for all registry writes — it only fires when the specific key has a SACL configured',
+      'Not enabling "Audit Registry" under Advanced Audit Policy — 4657 will not generate without it',
+      'Missing the "Old Value" and "New Value" data in the event, which shows exactly what changed'
+    ],
+    causes: [
+      'Software installation or uninstallation modifying registry',
+      'Group Policy applying registry settings',
+      'User or admin manually editing registry',
+      'Malware adding persistence via run keys or service keys',
+      'Antivirus or security software modifying configuration keys'
+    ],
+    steps: [
+      'Enable "Audit Registry" policy: Advanced Audit Policy → Object Access → Audit Registry',
+      'Add SACL to sensitive keys via regedit → key Properties → Security → Auditing',
+      'Filter Security log for Event 4657',
+      'Check "Process Name" — unexpected processes (cmd.exe, powershell.exe, wscript.exe) modifying run keys are suspicious',
+      'Check "Old Value Data" vs "New Value Data" to see exactly what changed',
+      'Cross-reference with Event 4688 (process created) for the process that made the change'
+    ],
+    symptoms: [
+      'registry modified',
+      'who changed registry',
+      'registry key changed',
+      'registry audit',
+      'track registry changes',
+      'startup registry key modified',
+      'run key changed',
+      'malware persistence registry'
+    ],
+    tags: ['registry', 'audit', 'object-access', 'security', 'persistence', 'malware-detection'],
+    powershell: `# Registry Modification Audit
+# Eventful
+# Note: Requires "Audit Registry" policy AND SACL on the target key
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4657
+    StartTime = (Get-Date).AddDays(-1)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated  = $_.TimeCreated
+        SubjectUser  = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+        ProcessName  = ($data | Where-Object Name -eq 'ProcessName').'#text'
+        ObjectName   = ($data | Where-Object Name -eq 'ObjectName').'#text'
+        ValueName    = ($data | Where-Object Name -eq 'ObjectValueName').'#text'
+        OldValue     = ($data | Where-Object Name -eq 'OldValue').'#text'
+        NewValue     = ($data | Where-Object Name -eq 'NewValue').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [4688, 4624, 4663],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4657'
+  },
+
+  {
+    id: 4768,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Kerberos Authentication Ticket (TGT) Requested',
+    short_desc: 'A Kerberos TGT was requested from a domain controller — initial domain authentication.',
+    description: 'Event 4768 is generated on a domain controller every time a Kerberos Ticket-Granting Ticket (TGT) is requested. This is the first step of Kerberos authentication — before a user can access any resource, they must obtain a TGT from the DC. The event captures the account name, client IP address, encryption type used, and result code. Failed TGT requests (non-0x0 result codes) indicate authentication problems — 0x18 = bad password, 0x6 = account not found, 0x12 = account disabled.',
+    why_it_happens: 'Kerberos TGT requests are generated by domain-joined computers at login, by services at startup, and whenever a Kerberos ticket expires and must be renewed. Monitoring 4768 on DCs allows detection of password spray attacks (same account, many IPs), credential stuffing, and unusual off-hours authentication.',
+    what_good_looks_like: 'TGT requests from known workstation IPs for known accounts during business hours. Encryption type should be AES256 (0x12) for modern environments — RC4 (0x17) is legacy and may indicate older clients or pass-the-hash tooling.',
+    common_mistakes: [
+      'Not filtering by result code — successful (0x0) TGTs are normal, failures (0x18, 0x6, 0x12) are what to watch',
+      'Ignoring the encryption type field — 0x17 (RC4) requests from modern clients can indicate pass-the-hash or downgrade attacks',
+      'Not correlating IP addresses with known workstation inventory'
+    ],
+    causes: [
+      'User logging in to domain-joined computer',
+      'Service account authenticating at service start',
+      'Failed login attempt — bad password or disabled account',
+      'Password spray or brute force attack on domain accounts',
+      'Kerberos ticket renewal at natural expiry'
+    ],
+    steps: [
+      'Filter for 4768 on domain controllers with non-zero result codes for failure analysis',
+      'Result code 0x18 = wrong password — repeated occurrences may indicate a spray attack',
+      'Result code 0x6 = account not found — check for typos or enumeration attempts',
+      'Result code 0x12 = disabled account being targeted',
+      'Check Encryption Type: 0x17 (RC4) from modern OS clients is suspicious',
+      'Correlate Client Address with workstation inventory for unknown source IPs'
+    ],
+    symptoms: [
+      'Kerberos authentication failing',
+      'domain login failing',
+      'Kerberos TGT error',
+      'account not found Kerberos',
+      'Kerberos bad password',
+      'password spray attack',
+      'Kerberos ticket request failed',
+      'domain authentication error',
+      'RC4 encryption Kerberos'
+    ],
+    tags: ['kerberos', 'authentication', 'tgt', 'domain-controller', 'security', 'brute-force'],
+    powershell: `# Kerberos TGT Request Analysis (run on DC)
+# Eventful
+
+$startTime = (Get-Date).AddHours(-4)
+
+# Failed TGT requests (non-zero result codes)
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4768
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated    = $_.TimeCreated
+        Account        = ($data | Where-Object Name -eq 'TargetUserName').'#text'
+        ClientIP       = ($data | Where-Object Name -eq 'IpAddress').'#text'
+        Status         = ($data | Where-Object Name -eq 'Status').'#text'
+        EncryptionType = ($data | Where-Object Name -eq 'TicketEncryptionType').'#text'
+    }
+} | Where-Object { $_.Status -ne '0x0' } |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [4769, 4771, 4625, 4624],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4768'
+  },
+
+  {
+    id: 4769,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Kerberos Service Ticket Requested',
+    short_desc: 'A Kerberos service ticket (TGS) was requested to access a specific resource.',
+    description: 'Event 4769 is generated on a domain controller when a client requests a Kerberos service ticket (TGS — Ticket-Granting Service ticket) to access a specific resource (file share, SQL server, web app, etc.). Unlike 4768 (TGT), this event identifies which specific service the user is trying to access. Failed 4769 requests indicate access problems, and suspicious patterns (Kerberoasting — requesting tickets for many service accounts with RC4 encryption) are detectable via this event.',
+    why_it_happens: 'Every time a Kerberos-authenticated user accesses a service, a TGS ticket is requested. This includes accessing file shares, logging into SQL, connecting to Exchange, and more. Kerberoasting attacks request TGS tickets for service accounts offline to crack their passwords — these show as many 4769 events with encryption type 0x17 (RC4) for service account SPNs.',
+    what_good_looks_like: 'TGS requests with AES encryption (0x12/0x11). Service tickets for expected SPNs from expected client IPs. No bulk requests for service account SPNs with RC4 encryption.',
+    common_mistakes: [
+      'Not alerting on bulk 4769 events with EncryptionType 0x17 for service accounts — this is a Kerberoasting indicator',
+      'Ignoring the Service Name field — it tells you exactly what resource was being accessed',
+      'Not correlating failed 4769 with access denied errors on the target resource'
+    ],
+    causes: [
+      'User accessing a network resource (normal operation)',
+      'Kerberoasting attack — attacker requesting service tickets to crack offline',
+      'Service account with weak password being targeted',
+      'Access denied to resource requiring specific SPN',
+      'SPN misconfiguration causing Kerberos fallback to NTLM'
+    ],
+    steps: [
+      'Monitor for 4769 with EncryptionType 0x17 (RC4) for service account SPNs — Kerberoasting indicator',
+      'Check Service Name for unusual SPNs being requested',
+      'Bulk 4769 requests from a single IP in a short window is suspicious',
+      'Ensure service accounts use AES encryption: Set-ADUser <svc> -KerberosEncryptionType AES256',
+      'Use Group Managed Service Accounts (gMSAs) for services to eliminate password cracking risk'
+    ],
+    symptoms: [
+      'Kerberoasting attack',
+      'Kerberos service ticket failed',
+      'kerberos access denied',
+      'service ticket request error',
+      'Kerberos TGS error',
+      'RC4 Kerberos service ticket',
+      'service account kerberos attack',
+      'kerberos service ticket audit'
+    ],
+    tags: ['kerberos', 'service-ticket', 'tgs', 'kerberoasting', 'domain-controller', 'security'],
+    powershell: `# Kerberos Service Ticket Analysis (run on DC)
+# Eventful
+# Alert: bulk RC4 tickets for service accounts = Kerberoasting
+
+$startTime = (Get-Date).AddHours(-1)
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4769
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated    = $_.TimeCreated
+        Account        = ($data | Where-Object Name -eq 'TargetUserName').'#text'
+        ServiceName    = ($data | Where-Object Name -eq 'ServiceName').'#text'
+        ClientIP       = ($data | Where-Object Name -eq 'IpAddress').'#text'
+        EncryptionType = ($data | Where-Object Name -eq 'TicketEncryptionType').'#text'
+        Status         = ($data | Where-Object Name -eq 'Status').'#text'
+    }
+} | Where-Object { $_.EncryptionType -eq '0x17' -and $_.ServiceName -notlike '*$' } |
+    Group-Object ServiceName | Sort-Object Count -Descending | Format-Table -AutoSize`,
+    related_ids: [4768, 4771, 4624],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4769'
+  },
+
+  {
+    id: 4697,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Intermediate',
+    title: 'Service Installed on System',
+    short_desc: 'A new Windows service was installed — captures service name, binary path, and installing account.',
+    description: 'Event 4697 is generated when a new service is installed via the Service Control Manager. It captures the service name, the binary path (ImagePath), the service type, start type, and the account under which it runs. This event is critical for security monitoring — malware frequently installs services for persistence, and attackers use service creation as a lateral movement and persistence technique.',
+    why_it_happens: 'Any process with SeLoadDriverPrivilege or equivalent can install a service. Normal sources include software installers, Windows Updates, and administrative scripts. Malicious sources include malware dropping a service binary, lateral movement tools (e.g., PsExec, Cobalt Strike), and ransomware establishing persistence.',
+    what_good_looks_like: 'Services installed from expected paths (C:\\Program Files, C:\\Windows) by expected accounts (SYSTEM, admin accounts) during software deployment windows. No services with random names, paths in temp directories, or UNC paths.',
+    common_mistakes: [
+      'Not alerting on services with binary paths in user-writeable locations (Temp, AppData, Downloads)',
+      'Not checking the ImagePath for encoded commands or suspicious parameters',
+      'Missing services installed from network paths (UNC) — these are common in lateral movement'
+    ],
+    causes: [
+      'Software installer registering a new service',
+      'Windows Update installing a component',
+      'IT admin deploying a service via script',
+      'Malware or attack tool installing a persistence service',
+      'Remote management tool (PsExec, SC.exe) installing a service for lateral movement'
+    ],
+    steps: [
+      'Filter Security log for Event 4697',
+      'Check "Service File Name" (ImagePath) — paths in Temp, AppData, or UNC are suspicious',
+      'Check "Subject" — who installed the service? Unexpected user accounts are a red flag',
+      'Verify the service binary is signed: Get-AuthenticodeSignature "<path>"',
+      'Check when the binary was dropped: (Get-Item "<path>").CreationTime',
+      'Cross-reference with Event 4688 (process create) for the process that installed the service'
+    ],
+    symptoms: [
+      'new service installed',
+      'unknown service appeared',
+      'malware service installed',
+      'service installed audit',
+      'suspicious service created',
+      'service persistence',
+      'who installed this service',
+      'lateral movement service'
+    ],
+    tags: ['service', 'persistence', 'malware-detection', 'security', 'audit', 'lateral-movement'],
+    powershell: `# Service Installation Audit
+# Eventful
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 4697
+    StartTime = (Get-Date).AddDays(-7)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated  = $_.TimeCreated
+        InstalledBy  = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+        ServiceName  = ($data | Where-Object Name -eq 'ServiceName').'#text'
+        ImagePath    = ($data | Where-Object Name -eq 'ServiceFileName').'#text'
+        StartType    = ($data | Where-Object Name -eq 'ServiceStartType').'#text'
+        Account      = ($data | Where-Object Name -eq 'ServiceAccount').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [7045, 4688, 4624],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-4697'
+  },
+
+  {
+    id: 5157,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Windows Firewall Blocked a Connection',
+    short_desc: 'The Windows Filtering Platform blocked a network connection — captures process, port, direction, and IP.',
+    description: 'Event 5157 is generated when the Windows Filtering Platform (the kernel-level firewall engine) blocks a connection attempt. It captures the process that initiated the connection, source and destination IP/port, and the protocol. Unlike firewall rule events (4946/4948), this event is about actual traffic being blocked in real-time. When enabled, this is the key event for detecting outbound connection attempts by malware, lateral movement, or unauthorized services trying to communicate.',
+    why_it_happens: 'Generated under "Audit Filtering Platform Connection" policy for every dropped packet that matches the WFP filters. This creates very high volume on busy systems — typically only enabled for specific investigations or critical servers. Malware attempting C2 connections, unauthorized port scanners, and services misconfigured to use blocked ports all generate 5157 events.',
+    what_good_looks_like: 'Known applications blocked on known ports (e.g., browsers blocked from unusual ports). No unusual processes (svchost.exe using non-standard ports, cmd.exe initiating outbound connections).',
+    common_mistakes: [
+      'Enabling this policy on high-traffic servers without log size limits — can generate millions of events per day',
+      'Not filtering by Process Name when investigating — the process is the most important field',
+      'Confusing 5157 (blocked) with 5156 (allowed) — both can be informative but serve different purposes'
+    ],
+    causes: [
+      'Windows Firewall rule blocking outbound/inbound connection',
+      'Malware attempting command-and-control connection on blocked port',
+      'Service misconfigured to use a blocked port',
+      'Application attempting to bind to a privileged port without permission',
+      'Lateral movement tool attempting to connect to blocked internal ports'
+    ],
+    steps: [
+      'Enable Audit Filtering Platform Connection: auditpol /set /subcategory:"Filtering Platform Connection" /success:enable /failure:enable',
+      'Filter Security log for 5157',
+      'Focus on "Application Name" (process path) — cmd.exe, powershell.exe, or unknown processes making outbound connections',
+      'Note Destination Address and Port — C2 traffic often goes to unusual ports or external IPs',
+      'Correlate with 4688 (process create) to see what spawned the process'
+    ],
+    symptoms: [
+      'firewall blocking connection',
+      'application cannot connect',
+      'connection blocked by firewall',
+      'outbound connection blocked',
+      'malware C2 connection blocked',
+      'Windows firewall dropped connection',
+      'service cannot reach server',
+      'firewall audit blocked traffic'
+    ],
+    tags: ['firewall', 'wfp', 'network', 'blocked', 'security', 'audit', 'malware-detection'],
+    powershell: `# Windows Firewall Blocked Connection Analysis
+# Eventful
+# Note: Requires "Audit Filtering Platform Connection" → Failure enabled
+
+$startTime = (Get-Date).AddHours(-1)
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 5157
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated  = $_.TimeCreated
+        ProcessName  = ($data | Where-Object Name -eq 'Application').'#text'
+        SrcPort      = ($data | Where-Object Name -eq 'SourcePort').'#text'
+        DstAddress   = ($data | Where-Object Name -eq 'DestAddress').'#text'
+        DstPort      = ($data | Where-Object Name -eq 'DestPort').'#text'
+        Protocol     = ($data | Where-Object Name -eq 'Protocol').'#text'
+    }
+} | Group-Object DstAddress | Sort-Object Count -Descending |
+    Select-Object -First 20 | Format-Table -AutoSize`,
+    related_ids: [5156, 4946, 4948, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-5157'
+  },
+
+  {
+    id: 5156,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Advanced',
+    title: 'Windows Firewall Allowed a Connection',
+    short_desc: 'The Windows Filtering Platform permitted a network connection — process, IP, and port captured.',
+    description: 'Event 5156 is the allowed-connection counterpart to 5157. It is generated when Windows Filtering Platform permits a connection. Enabled for threat hunting to identify what processes are making network connections. Very high volume on servers — typically only enabled during specific investigations. Useful for detecting unexpected processes (cmd.exe, PowerShell) making network connections, even when those connections succeed.',
+    why_it_happens: 'Generated under "Audit Filtering Platform Connection" policy (Success enabled). Every permitted network connection generates this event. On a busy server this can be hundreds of thousands per hour.',
+    what_good_looks_like: 'Expected application processes connecting to known IPs and ports. No shells, scripting engines, or system utilities making unusual outbound connections.',
+    common_mistakes: [
+      'Enabling on production servers without capping the log size — the volume can cause other events to be overwritten',
+      'Not filtering by Process Name — looking at raw 5156 events without filtering is overwhelming'
+    ],
+    causes: [
+      'Normal application network activity',
+      'Malware successfully connecting to C2 (permitted by firewall)',
+      'Unauthorized lateral movement that the firewall allows',
+      'Data exfiltration on allowed ports (80, 443)'
+    ],
+    steps: [
+      'Enable: auditpol /set /subcategory:"Filtering Platform Connection" /success:enable',
+      'Filter by suspicious process names: cmd.exe, powershell.exe, wscript.exe, mshta.exe',
+      'Look for connections from unexpected processes to external IPs on ports 80/443',
+      'Correlate process with 4688 (process create) to see the full launch chain'
+    ],
+    symptoms: [
+      'what is connecting to internet',
+      'unknown process making network connection',
+      'application network activity audit',
+      'firewall allowed connection audit',
+      'detect malware C2 traffic',
+      'process making outbound connection',
+      'network connection logging'
+    ],
+    tags: ['firewall', 'wfp', 'network', 'allowed', 'security', 'audit', 'threat-hunting'],
+    powershell: `# Windows Firewall Allowed Connection Analysis
+# Eventful
+# Note: High volume — filter by process name
+
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = 5156
+    StartTime = (Get-Date).AddMinutes(-30)
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated = $_.TimeCreated
+        ProcessName = ($data | Where-Object Name -eq 'Application').'#text'
+        DstAddress  = ($data | Where-Object Name -eq 'DestAddress').'#text'
+        DstPort     = ($data | Where-Object Name -eq 'DestPort').'#text'
+    }
+} | Where-Object { $_.ProcessName -match 'cmd|powershell|wscript|mshta|rundll32' } |
+    Sort-Object TimeCreated -Descending | Format-Table -AutoSize`,
+    related_ids: [5157, 4946, 4688],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows/security/threat-protection/auditing/event-5156'
+  },
+
+  {
+    id: 6273,
+    source: 'Microsoft-Windows-Security-Auditing',
+    channel: 'Security',
+    severity: 'Info',
+    skill_level: 'Intermediate',
+    title: 'Network Policy Server Denied Access',
+    short_desc: 'NPS (RADIUS) denied a VPN or 802.1X authentication request — includes reason code.',
+    description: 'Event 6273 from Network Policy Server (NPS/RADIUS) is generated when NPS denies a connection request from a VPN, 802.1X wireless, or 802.1X wired client. The event includes the username, client IP (NAS IP), reason code, and network policy name. Common reason codes: 16 = account locked, 23 = user not permitted for dial-in, 65 = certificate not trusted, 66 = client certificate expired. This is the primary event for diagnosing VPN and wireless authentication failures.',
+    why_it_happens: 'NPS evaluates each authentication request against configured network policies. If the policies reject the request (wrong credentials, unauthorized account, policy condition not met, certificate issue), 6273 is generated. Common scenarios: user account does not have VPN access granted in AD, certificate expired, or NPS connection request policy is misconfigured.',
+    what_good_looks_like: 'All legitimate VPN and 802.1X users receive event 6272 (access granted) rather than 6273. Rare 6273 events from expired credentials or misconfigured clients.',
+    common_mistakes: [
+      'Not reading the Reason-Text field — it contains a plain-English explanation of why access was denied',
+      'Forgetting that user accounts need the "Allow" dial-in permission in AD or NPS must override via policy',
+      'Not checking the network policy name — it tells you which policy matched and rejected the request',
+      'Ignoring the NAS-IP-Address — this identifies which VPN gateway or access point is denying access'
+    ],
+    causes: [
+      'User account does not have VPN/dial-in permission in AD',
+      'User password expired or account disabled',
+      'Network policy condition not met (group membership, time-of-day restriction)',
+      'Client certificate expired or not trusted by NPS (802.1X/PEAP)',
+      'Wrong password or certificate presented',
+      'NPS network policy misconfigured — wrong conditions'
+    ],
+    steps: [
+      'Open Event Viewer on NPS server → Security log, filter for Event 6273',
+      'Read "Reason-Text" field for a plain-English explanation',
+      'Check "Fully Qualified Account Name" — verify the account exists and is not locked',
+      'Check AD dial-in permission: ADUC → user Properties → Dial-in tab → "Allow access" or "Control access through NPS Network Policy"',
+      'Check NPS network policy for conditions that may be blocking the user',
+      'For certificate errors: verify the client certificate is valid and the NPS server trusts the issuing CA'
+    ],
+    symptoms: [
+      'VPN access denied',
+      'VPN login failing',
+      'user cannot connect to VPN',
+      '802.1x authentication failed',
+      'wireless authentication denied',
+      'NPS denied access',
+      'RADIUS authentication failed',
+      'remote access denied',
+      'network policy denied',
+      'VPN certificate error'
+    ],
+    tags: ['vpn', 'nps', 'radius', '802.1x', 'wireless', 'authentication', 'security'],
+    powershell: `# NPS Authentication Failure Analysis
+# Eventful
+
+$startTime = (Get-Date).AddHours(-24)
+
+# NPS denials (6273) and successes (6272) — run on NPS server
+Get-WinEvent -FilterHashtable @{
+    LogName   = 'Security'
+    Id        = @(6272, 6273)
+    StartTime = $startTime
+} -ErrorAction SilentlyContinue | ForEach-Object {
+    $xml  = [xml]$_.ToXml()
+    $data = $xml.Event.EventData.Data
+    [PSCustomObject]@{
+        TimeCreated  = $_.TimeCreated
+        EventId      = $_.Id
+        Result       = if ($_.Id -eq 6272) { 'GRANTED' } else { 'DENIED' }
+        Account      = ($data | Where-Object Name -eq 'SubjectUserName').'#text'
+        NasIP        = ($data | Where-Object Name -eq 'CallingStationID').'#text'
+        ReasonCode   = ($data | Where-Object Name -eq 'ReasonCode').'#text'
+        ReasonText   = ($data | Where-Object Name -eq 'Reason').'#text'
+        PolicyName   = ($data | Where-Object Name -eq 'NetworkPolicyName').'#text'
+    }
+} | Sort-Object TimeCreated -Descending | Format-List`,
+    related_ids: [6272, 4625, 4768],
+    ms_docs: 'https://learn.microsoft.com/en-us/windows-server/networking/technologies/nps/nps-top'
   }
 ];
