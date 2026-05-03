@@ -75,11 +75,12 @@ function parseXml(text) {
 
   const records = [...doc.querySelectorAll('RacEvents > Event')].map(ev => {
     const get = tag => ev.querySelector(tag)?.textContent?.trim() ?? '';
+    const time    = get('Time');
     const impact  = get('Impact');
     const source  = get('Source');
     const problem = get('Problem');
-    return { source, product: source, message: problem, impact, cat: classifyEvent(problem) };
-  });
+    return { time, date: time.slice(0, 10), source, product: source, message: problem, impact, cat: classifyEvent(problem) };
+  }).sort((a, b) => b.time.localeCompare(a.time));
 
   if (!records.length) throw new Error('No events found in this Reliability Monitor export.');
   return { generated, records };
@@ -95,6 +96,10 @@ function analyse(records) {
   const hangs    = records.filter(r => r.cat === 'hang');
   const warnings = records.filter(r => r.impact === 'Warning');
 
+  const fmtTime = t => t ? t.replace('T', ' ').slice(0, 16) : '';
+  const eventRow = r =>
+    `<div class="finding-event"><span class="fe-time">${escHtml(fmtTime(r.time))}</span><span class="fe-src">${escHtml(r.source)}</span><span class="fe-msg">${escHtml(r.message)}</span></div>`;
+
   // 1. Hardware failure indicators
   const hwHits = records.filter(r =>
     HW_PATTERNS.some(p => p.test(r.source) || p.test(r.message))
@@ -104,9 +109,7 @@ function analyse(records) {
       `Hardware failure indicator${hwHits.length > 1 ? 's' : ''} detected (${hwHits.length})`,
       'One or more records contain keywords associated with disk I/O errors, NTFS corruption, bad sectors, or memory faults. ' +
       'Run <code>chkdsk C: /f /r</code> and check SMART data before any other investigation.',
-      hwHits.slice(0, 3).map(r =>
-        `<div class="finding-event"><span class="fe-src">${escHtml(r.source)}</span> — ${escHtml(r.message)}</div>`
-      ).join('')
+      hwHits.slice(0, 3).map(eventRow).join('')
     );
   }
 
@@ -114,15 +117,20 @@ function analyse(records) {
   const crashByApp = {};
   for (const r of crashes) {
     const key = r.source.toLowerCase();
-    if (!crashByApp[key]) crashByApp[key] = { label: r.source, count: 0 };
-    crashByApp[key].count++;
+    if (!crashByApp[key]) crashByApp[key] = { label: r.source, events: [] };
+    crashByApp[key].events.push(r);
   }
-  for (const v of Object.values(crashByApp).sort((a, b) => b.count - a.count)) {
-    if (v.count >= 2) {
+  for (const v of Object.values(crashByApp).sort((a, b) => b.events.length - a.events.length)) {
+    if (v.events.length >= 2) {
+      const times  = v.events.map(r => r.time).filter(Boolean).sort();
+      const first  = times.length ? fmtTime(times[0]) : '';
+      const last   = times.length > 1 ? fmtTime(times[times.length - 1]) : '';
+      const range  = first && last && first !== last ? ` between ${first} and ${last}` : first ? ` at ${first}` : '';
       add('warn',
-        `${escHtml(v.label)} crashed ${v.count} time${v.count > 1 ? 's' : ''}`,
-        'Repeated crash pattern. Check for a pending application update, conflicting DLL, or corrupt installation. ' +
-        'Look for Event 1000 in the Application log for faulting module details.'
+        `${escHtml(v.label)} crashed ${v.events.length} time${v.events.length > 1 ? 's' : ''}`,
+        `Repeated crash pattern${range}. Check for a pending application update, conflicting DLL, or corrupt installation. ` +
+        `Look for Event 1000 in the Application log for faulting module details.`,
+        v.events.slice(0, 5).map(eventRow).join('')
       );
     }
   }
@@ -131,30 +139,71 @@ function analyse(records) {
   const hangByApp = {};
   for (const r of hangs) {
     const key = r.source.toLowerCase();
-    if (!hangByApp[key]) hangByApp[key] = { label: r.source, count: 0 };
-    hangByApp[key].count++;
+    if (!hangByApp[key]) hangByApp[key] = { label: r.source, events: [] };
+    hangByApp[key].events.push(r);
   }
-  for (const v of Object.values(hangByApp).sort((a, b) => b.count - a.count)) {
-    if (v.count >= 2) {
+  for (const v of Object.values(hangByApp).sort((a, b) => b.events.length - a.events.length)) {
+    if (v.events.length >= 2) {
+      const times = v.events.map(r => r.time).filter(Boolean).sort();
+      const first = times.length ? fmtTime(times[0]) : '';
+      const last  = times.length > 1 ? fmtTime(times[times.length - 1]) : '';
+      const range = first && last && first !== last ? ` between ${first} and ${last}` : first ? ` at ${first}` : '';
       add('warn',
-        `${escHtml(v.label)} stopped responding ${v.count} time${v.count > 1 ? 's' : ''}`,
-        'Repeated hang pattern. Common causes: main thread blocked on slow disk/network, deadlock, or antivirus ' +
-        'scanning files the app is trying to access. Try adding the app directory to AV exclusions as a test.'
+        `${escHtml(v.label)} stopped responding ${v.events.length} time${v.events.length > 1 ? 's' : ''}`,
+        `Repeated hang pattern${range}. Common causes: main thread blocked on slow disk/network, deadlock, or antivirus ` +
+        `scanning files the app is trying to access. Try adding the app directory to AV exclusions as a test.`,
+        v.events.slice(0, 5).map(eventRow).join('')
       );
     }
   }
 
-  // 4. Failed updates / installs
+  // 4. Post-install regressions — crash cluster within 48h of a software change
+  const software = records.filter(r => r.cat === 'software');
+  for (const sw of software) {
+    const swTime = new Date(sw.time);
+    const window48h = new Date(swTime.getTime() + 48 * 60 * 60 * 1000);
+    const postCrashes = crashes.filter(r => {
+      const t = new Date(r.time);
+      return t >= swTime && t <= window48h;
+    });
+    if (postCrashes.length >= 2) {
+      const apps = [...new Set(postCrashes.map(r => r.source))].join(', ');
+      add('warn',
+        `${postCrashes.length} crash${postCrashes.length > 1 ? 'es' : ''} within 48h of software change on ${escHtml(fmtTime(sw.time).slice(0, 10))}`,
+        `<strong>${escHtml(sw.source)}</strong> was installed/changed at ${escHtml(fmtTime(sw.time))}. ` +
+        `${postCrashes.length} crash${postCrashes.length > 1 ? 'es' : ''} followed involving: ${escHtml(apps)}. ` +
+        `Consider rolling back or checking for compatibility issues.`,
+        postCrashes.slice(0, 5).map(eventRow).join('')
+      );
+    }
+  }
+
+  // 5. Recent critical events (last 24h relative to report generation time)
+  const reportTime = new Date(records[0]?.time || Date.now());
+  const recent = records.filter(r => {
+    const t = new Date(r.time);
+    return (reportTime - t) <= 24 * 60 * 60 * 1000 && (r.cat === 'crash' || r.cat === 'hang');
+  });
+  if (recent.length) {
+    add('warn',
+      `${recent.length} crash/hang event${recent.length > 1 ? 's' : ''} in the 24h before this report`,
+      `Active instability — these events are recent and likely still occurring. Prioritise investigation.`,
+      recent.map(eventRow).join('')
+    );
+  }
+
+  // 6. Failed updates / installs
   if (warnings.length >= 3) {
     const labels = [...new Set(warnings.slice(0, 5).map(r => r.source))].join(', ');
     add('warn',
       `${warnings.length} failed update${warnings.length > 1 ? 's' : ''} or installation${warnings.length > 1 ? 's' : ''}`,
       `Multiple Warning-impact events detected. Check Windows Update history and application installer logs. ` +
-      `Affected: ${escHtml(labels)}${warnings.length > 5 ? ` + ${warnings.length - 5} more` : ''}.`
+      `Affected: ${escHtml(labels)}${warnings.length > 5 ? ` + ${warnings.length - 5} more` : ''}.`,
+      warnings.slice(0, 5).map(eventRow).join('')
     );
   }
 
-  // 5. High crash volume
+  // 7. High crash volume
   if (crashes.length >= 8 && !findings.some(f => f.sev === 'crit')) {
     add('warn',
       `High crash volume — ${crashes.length} application crashes recorded`,
@@ -163,7 +212,7 @@ function analyse(records) {
     );
   }
 
-  // 6. All quiet
+  // 8. All quiet
   if (findings.length === 0) {
     add('ok',
       'No significant issues detected',
@@ -217,7 +266,10 @@ function renderOverview(records, generated) {
   const hangs    = records.filter(r => r.cat === 'hang').length;
   const software = records.filter(r => r.cat === 'software').length;
   const warnings = records.filter(r => r.impact === 'Warning').length;
-  const reportDate = generated ? generated.slice(0, 10) : '—';
+  const dates    = records.map(r => r.date).filter(Boolean).sort();
+  const earliest = dates.length ? dates[0] : '—';
+  const latest   = dates.length ? dates[dates.length - 1] : '—';
+  const dateRange = earliest === latest ? earliest : `${earliest} → ${latest}`;
 
   const stat = (num, label, cls, filter) =>
     `<div class="ob-stat ${cls}" data-filter="${filter}" style="cursor:pointer" title="Show ${label.toLowerCase()}">` +
@@ -235,8 +287,8 @@ function renderOverview(records, generated) {
       </div>
       <div class="ob-divider"></div>
       <div style="display:flex;flex-direction:column;gap:2px">
-        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">Report date</span>
-        <span style="font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text2)">${escHtml(reportDate)}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)">Date range</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text2)">${escHtml(dateRange)}</span>
       </div>
     </div>
   `;
@@ -310,6 +362,7 @@ function renderRecordsTable(records, activeFilter) {
       <table class="event-table">
         <thead>
           <tr>
+            <th>Time</th>
             <th>Impact</th>
             <th>Category</th>
             <th>Source / Application</th>
@@ -319,6 +372,7 @@ function renderRecordsTable(records, activeFilter) {
         <tbody>
           ${filtered.map(r => `
             <tr>
+              <td style="font-family:var(--mono);font-size:11px;color:var(--text3);white-space:nowrap">${escHtml(r.time ? r.time.replace('T', ' ').slice(0, 16) : '—')}</td>
               <td><span class="cat-badge" style="color:${r.impact === 'Critical' ? '#f85149' : r.impact === 'Warning' ? '#d29922' : '#8b949e'}">${escHtml(r.impact)}</span></td>
               <td><span class="cat-badge" style="color:${CAT_COLOR[r.cat] ?? '#8b949e'}">${CAT_LABEL[r.cat] ?? r.cat}</span></td>
               <td class="et-source">${escHtml(r.source)}</td>

@@ -1342,6 +1342,41 @@ ul, ol { list-style: none; }
   border-radius: var(--r);
 }
 
+.finding-events { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+
+.finding-event {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--surface2);
+  border-radius: 5px;
+  font-size: 12px;
+  line-height: 1.4;
+  flex-wrap: wrap;
+}
+
+.fe-time {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.fe-src {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.fe-msg {
+  font-size: 11px;
+  color: var(--text3);
+}
+
 .filter-csv-btn {
   height: 32px;
   padding: 0 12px;
