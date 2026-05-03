@@ -50,6 +50,15 @@
 
       <details class="how-to">
         <summary>How to generate ReliabilityHistory.xml</summary>
+
+        <p style="margin:0 0 0.5rem;font-weight:600">Option A — Quick one-liner (PowerShell, any machine)</p>
+        <ol>
+          <li>Open PowerShell as Administrator</li>
+          <li>Run: <code>(Get-WmiObject Win32_ReliabilityRecords | ConvertTo-Xml).Save("C:\ReliabilityHistory.xml")</code></li>
+          <li>Upload <strong>C:\ReliabilityHistory.xml</strong> here</li>
+        </ol>
+
+        <p style="margin:0.75rem 0 0.5rem;font-weight:600">Option B — Get-EventLogExport.ps1 (full log bundle)</p>
         <ol>
           <li>Download and run <strong>Get-EventLogExport.ps1</strong> on the target machine (as Administrator)</li>
           <li>The script creates a ZIP at <code>C:\Temp\EventLogs_HOSTNAME_DATE.zip</code></li>
@@ -57,7 +66,7 @@
           <li>Upload that file here</li>
         </ol>
         <p style="margin-top:0.75rem;font-size:0.82rem;color:var(--text-muted)">
-          The script is available at
+          Script available at
           <a href="https://tools.lrfa.dev/#scripts/get-eventlogexport" target="_blank" rel="noopener" style="color:var(--accent)">tools.lrfa.dev</a>
         </p>
       </details>

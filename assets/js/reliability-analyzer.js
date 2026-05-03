@@ -64,6 +64,18 @@ function isHardwareIndicator(msg) {
   return HW_PATTERNS.some(p => p.test(msg));
 }
 
+// ─── Datetime normalisation ──────────────────────────────────────────────────
+// Handles: WMI "YYYYMMDDHHMMSS.000000±UUU", ISO "2023-05-15T12:00:00", our "2023-05-15 12:00:00"
+function normaliseTime(t) {
+  if (!t) return '';
+  if (/^\d{14}/.test(t)) {
+    const m = t.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/);
+    return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : t;
+  }
+  if (t.includes('T')) return t.replace('T', ' ').slice(0, 19);
+  return t;
+}
+
 // ─── XML parser ──────────────────────────────────────────────────────────────
 function parseXml(text) {
   const parser = new DOMParser();
@@ -72,27 +84,56 @@ function parseXml(text) {
   const parseErr = doc.querySelector('parsererror');
   if (parseErr) throw new Error('Invalid XML: ' + parseErr.textContent.slice(0, 120));
 
-  const root = doc.querySelector('ReliabilityRecords');
-  if (!root) throw new Error('Not a ReliabilityHistory.xml file — missing <ReliabilityRecords> root element.');
+  const rootTag = doc.documentElement.tagName;
+  let computer = '', generated = '', records = [];
 
-  const computer  = root.getAttribute('computer') || '';
-  const generated = root.getAttribute('generated') || '';
+  if (rootTag === 'ReliabilityRecords') {
+    // Format: Get-EventLogExport.ps1
+    computer  = doc.documentElement.getAttribute('computer') || '';
+    generated = doc.documentElement.getAttribute('generated') || '';
+    records = [...doc.querySelectorAll('Record')].map(r => {
+      const get = tag => r.querySelector(tag)?.textContent?.trim() ?? '';
+      const time = normaliseTime(get('TimeGenerated'));
+      return {
+        time, date: time.slice(0, 10),
+        source:  get('SourceName'),
+        product: get('ProductName'),
+        message: get('Message'),
+        eventId: get('EventIdentifier'),
+        user:    get('User'),
+        cat:     classify(get('SourceName')),
+      };
+    });
 
-  const records = [...doc.querySelectorAll('Record')].map(r => {
-    const get = tag => r.querySelector(tag)?.textContent?.trim() ?? '';
-    const time = get('TimeGenerated');
-    return {
-      time,
-      date:    time.slice(0, 10),
-      source:  get('SourceName'),
-      product: get('ProductName'),
-      message: get('Message'),
-      eventId: get('EventIdentifier'),
-      user:    get('User'),
-      cat:     classify(get('SourceName')),
-    };
-  }).sort((a, b) => b.time.localeCompare(a.time));
+  } else if (rootTag === 'Objects') {
+    // Format: Get-WmiObject Win32_ReliabilityRecords | ConvertTo-Xml
+    const objs = [...doc.querySelectorAll('Object')].filter(o =>
+      (o.getAttribute('Type') || '').includes('Win32_ReliabilityRecords')
+    );
+    if (!objs.length) throw new Error('No Win32_ReliabilityRecords objects found in this ConvertTo-Xml file.');
+    records = objs.map(obj => {
+      const getProp = name => {
+        const el = [...obj.querySelectorAll('Property')].find(p => p.getAttribute('Name') === name);
+        return el?.textContent?.trim() ?? '';
+      };
+      const time = normaliseTime(getProp('TimeGenerated'));
+      return {
+        time, date: time.slice(0, 10),
+        source:  getProp('SourceName'),
+        product: getProp('ProductName'),
+        message: getProp('Message'),
+        eventId: String(getProp('EventIdentifier')),
+        user:    getProp('User'),
+        cat:     classify(getProp('SourceName')),
+      };
+    });
 
+  } else {
+    throw new Error(`Unrecognised format — root element is <${rootTag}>. Expected <ReliabilityRecords> (Get-EventLogExport.ps1) or <Objects> (ConvertTo-Xml).`);
+  }
+
+  if (!records.length) throw new Error('No reliability records found in this file.');
+  records.sort((a, b) => b.time.localeCompare(a.time));
   return { computer, generated, records };
 }
 
@@ -349,8 +390,6 @@ function processFile(file) {
       processingText.textContent = 'Analysing…';
       const { computer, generated, records } = parseXml(e.target.result);
 
-      if (!records.length) throw new Error('No <Record> elements found in this file.');
-
       processingSection.hidden = true;
       resultsSection.hidden    = false;
 
@@ -375,7 +414,7 @@ function processFile(file) {
         <p class="processing-error">
           <strong>Could not parse file</strong><br>
           ${escHtml(err.message)}<br>
-          <span style="font-size:0.82rem;color:var(--text-muted)">Expected a ReliabilityHistory.xml produced by Get-EventLogExport.ps1</span>
+          <span style="font-size:0.82rem;color:var(--text-muted)">Expected a ReliabilityHistory.xml from Get-EventLogExport.ps1, or the output of: (Get-WmiObject Win32_ReliabilityRecords | ConvertTo-Xml).Save("C:\ReliabilityHistory.xml")</span>
         </p>
         <button class="btn-secondary" style="margin-top:1rem" id="retry-btn">← Try another file</button>
       `;
